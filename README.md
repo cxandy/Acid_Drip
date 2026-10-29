@@ -1,5 +1,16 @@
 # Acid Drip - Bassline Synth, Drift Synth & Drum Machine
 
+> **This is a hardware-adapted fork.** Original project: [lonesoulsurfer/Acid_Drip](https://github.com/lonesoulsurfer/Acid_Drip_Bassline_and_Drum_Synth) by Marcus.
+>
+> Local changes in this build:
+> - Sync clock moved from GP2 to **GPIO8** (LCD RST jumpered to 3V3 to free it); GP2 is now drum/DRIFT audio only
+> - Drums and DRIFT stay audible in **both** sync directions (no longer muted by sync mode)
+> - `MADCTL 0x40` display-orientation fix
+> - Second firmware variant with the original (non-AcidBox) acid engine
+> - Chinese user manual (`说明书.md`) and `LOCAL_MODIFICATIONS.md`
+>
+> See `LOCAL_MODIFICATIONS.md` for the full change list.
+
 Youtube Video (click the image) - [![Acid Drip Demo](https://img.youtube.com/vi/anotb2mvv04/maxresdefault.jpg)](https://youtu.be/anotb2mvv04) 
 
 
@@ -29,15 +40,15 @@ NOTE: V5 firmware adds a second synth voice called DRIFT, pattern chaining for t
 | Pots | 3x analog (CUT, RES, DECAY) |
 | Audio out (acid) | GP15 -> 100R + 10nF RC filter -> 3.5mm jack |
 | Audio out (drums) | GP2 -> 470R resistor -> 3.5mm jack. In V5 this output also carries the DRIFT synth voice, summed with the drums |
-| Sync in/out | GP2 (hardware SPDT switch selects drum/DRIFT audio OR sync). Direction (in or out) is chosen from an on-screen menu at boot, see Sync In/Out below |
+| Sync in/out | GPIO8 in this build (original was GP2; the LCD RST line was moved off GP8 to 3V3 to free it). Direction (in or out) is chosen from an on-screen menu at boot, see Sync In/Out below |
 
 
 ### Wiring
 
 ```
-TFT   : SCK=GP6  SDA=GP7  RST=GP8  DC=GP10  CS=GP13
+TFT   : SCK=GP6  SDA=GP7  RST=3V3  DC=GP10  CS=GP13   (this build; RST moved off GP8)
 Pots  : CUT=GP26  RES=GP28  DCY=GP27
-Sync  : IN/OUT=GP2
+Sync  : IN/OUT=GP8
 Audio : Acid=GP15   Drums/DRIFT=GP2
 
 Top row pads (steps 1-8):
@@ -375,21 +386,21 @@ Holding pads 3+4+5+6 together for 1 second while in drum mode (and not holding p
 
 ---
 
-## Sync In / Sync Out / Drum Mode (GP2)
+## Sync In / Sync Out / Drum Mode (GP8)
 
-GP2 is shared between drum audio output (in V5, also the DRIFT synth voice, which sums with the drums on the same output) and the sync clock jack, in either direction. A physical **SPDT switch on the PCB** routes the pin to either function.
+This build routes the sync clock jack to **GPIO8** (the original V5 shared GP2 between audio and sync via a PCB SPDT switch; here GP2 is exclusively drum/DRIFT audio). Sync uses one pin in both directions — the direction is a firmware choice made at boot.
 
 **Boot detection selects the mode and, for sync, the direction:**
 
-- **Drum mode (default):** GP2 is claimed by PWMAudio DMA and outputs drum (and, in V5, DRIFT) audio. Switch in the DRUMS position. Hold nothing at power-on.
-- **Sync In mode:** Hold **pad 14** at power-on. A "SYNC MODE" menu appears; press **pad 1** for Sync In. GP2 is configured as a digital input and listens for an external clock pulse, driving this device's tempo from it. Switch in the SYNC position.
-- **Sync Out mode:** Hold **pad 14** at power-on. On the same "SYNC MODE" menu, press **pad 2** for Sync Out. GP2 becomes a clock output instead, generating a DIN-sync-style pulse train (24 pulses per quarter note, matching the TB-303/808/909 standard) from this device's own tempo, so it can drive other gear as the master. Switch in the SYNC position.
+- **Drum mode (default):** GP2 is claimed by PWMAudio DMA and outputs drum and DRIFT audio. Hold nothing at power-on.
+- **Sync In mode:** Hold **pad 14** at power-on. A "SYNC MODE" menu appears; press **pad 1** for Sync In. GP8 is configured as a digital input and listens for an external clock pulse, driving this device's tempo from it.
+- **Sync Out mode:** Hold **pad 14** at power-on. On the same "SYNC MODE" menu, press **pad 2** for Sync Out. GP8 becomes a clock output instead, generating a DIN-sync-style pulse train from this device's own tempo, so it can drive other gear as the master.
 
 A cyan "SYNC MODE" menu appears when pad 14 is held at boot, prompting for pad 1 (Sync In) or pad 2 (Sync Out); a "SYNC IN ACTIVE" or "SYNC OUT ACTIVE" confirmation follows briefly once chosen.
 
-Sync Out only emits pulses while the acid transport is running (pads 1+2). It goes idle (line held low) when stopped rather than free-running through a stopped pattern. The pulse width is fixed at 2ms regardless of tempo. The info bar's "S" indicator (top right) is cyan for Sync In and magenta for Sync Out, so you can tell direction at a glance while playing.
+Sync Out only emits pulses while the acid transport is running (pads 1+2). It goes idle (line held low) when stopped rather than free-running through a stopped pattern. One gate is sent per sequencer step, fixed at 15ms wide regardless of tempo. The info bar's "S" indicator (top right) is cyan for Sync In and magenta for Sync Out, so you can tell direction at a glance while playing.
 
-> The switch position and the held pad must match. If the switch is in SYNC position but the device boots into drum mode, GP2 will try to drive audio into the sync signal line. In V5, sync mode (either direction) silences drums and DRIFT together, since both share GP2 with the sync jack; the acid voice on GP15 is unaffected either way. Sync In and Sync Out cannot run at the same time, since they both need sole use of GP2, one as an input, one as an output; the boot menu is where you pick one for that session.
+> **Note on this build:** GP8 was the TFT reset pin in the original design; the LCD RST line is now jumpered to 3V3 so GP8 is free for sync. Because sync lives on its own pin, drum/DRIFT audio on GP2 keeps running in **both** sync directions — syncing never silences the drums any more (unlike the original GP2-sync firmware). Sync In and Sync Out still cannot run at the same time, since they share the one jack; the boot menu is where you pick one for that session.
 
 ---
 
