@@ -670,6 +670,10 @@ static float  g303DecayA    = 1.0f;
 static float  g303AccentOn  = 0.0f;      // current accentation amount 0..1
 static float  g303CutCV     = 250.0f;    // smoothed cutoff CV (filt declick)
 static float  g303AmpLP     = 0.0f;      // amp-envelope declick (~200Hz LP)
+static float  g303Sust      = 0.2f;      // amp sustain level (AcidBox _sust_level)
+static float  g303RelC      = 0.6f;      // per-sample release mult (1ms, 50ms accent)
+static uint8_t g303Gate     = 0;         // 1 = note held, 0 = released by a rest
+static float  gTbReso01     = 0.5f;      // RES pot 0..1 -> TeeBee resonance (linear)
 static uint16_t g303NoisePtr = 0;        // noise-table pointer (sound 3)
 
 // TeeBee filter (Rosic) state + coefficients
@@ -2005,6 +2009,7 @@ void triggerNote(uint8_t freqIdx, bool accent, bool gl) {
   gLastCh1Note = freqIdx;  // FOLW source — see declaration
   uint16_t f = noteFreq[constrain((int)freqIdx, 0, 59)] / 2;
 
+  bool legato = false;
   if ((gl || gPorta) && seq.running && f != gFreq) {
     int32_t ticks;
     if (gl) {
@@ -2020,6 +2025,7 @@ void triggerNote(uint8_t freqIdx, bool accent, bool gl) {
     gGlideStep = diff / ticks;
     if (gGlideStep == 0) gGlideStep = (diff > 0) ? 1 : -1;
     gGlide     = true;
+    legato     = gl;      // only a slide step holds the envelopes; portamento retriggers
   } else {
     gFreq   = f;
     gFreqFP = (int32_t)f << 8;
@@ -2035,19 +2041,32 @@ void triggerNote(uint8_t freqIdx, bool accent, bool gl) {
   gAccentActive = accent;  // accented notes get a slower filter-envelope decay (303-style "wah")
   gLastStepMs= millis();
 
-  // 303 voice: exponential (capacitor-discharge) envelopes, DCY-pot timed.
-  // Accent raises the envelope peak and holds the sweep open longer — the
-  // 303's signature "wah" — plus a small cutoff boost via g303AccentOn.
+  // 303 voice envelopes. The DCY pot maps like the original AcidBox knob
+  // (filter 15..5000ms, amp 15..7500ms through the same exponential knob
+  // curve), and each envelope covers ~4.2 time constants over that time —
+  // the exp_tbl shape AcidBox uses. The amp decays toward a 0.2 sustain and
+  // HOLDS there until the gate closes (the sequencer gates a note for its
+  // whole step), so the filter sweep is heard on a sustained note instead of
+  // the note dying underneath it. Accent shortens the filter decay 5x, adds
+  // 1.3x cutoff and releases slowly (50ms) — all as in SynthVoice.
   float dcyN = (float)(gDecaySpeed - 3) * (1.0f / 1023.0f);
   dcyN = dcyN < 0.0f ? 0.0f : (dcyN > 1.0f ? 1.0f : dcyN);
-  float envMs = 20.0f * powf(75.0f, dcyN);          // ~20ms .. ~1.5s
-  if (accent) envMs *= 1.5f;
-  g303DecayC   = expf(-1000.0f / (envMs * 16384.0f));
-  g303EnvC     = 1.0f;
-  g303DecayA   = expf(-1000.0f / (envMs * 0.7f * 16384.0f));
-  g303EnvA     = accent ? 1.22f : 1.0f;
-  g303AccentOn = accent ? 0.45f : 0.0f;
+  float kt     = (expf(2.71f * dcyN) - 1.0f) * 0.071279495455219f;
+  float filtMs = 15.0f + kt * 4985.0f;               // 15 .. 5000ms
+  float ampMs  = 15.0f + kt * 7485.0f;               // 15 .. 7500ms
+  g303DecayC   = expf(-4213.0f * (accent ? 5.0f : 1.0f) / (filtMs * 16384.0f));
+  g303DecayA   = expf(-4213.0f / (ampMs * 16384.0f));
+  g303RelC     = accent ? 0.9949f : 0.60f;           // 50ms / ~1ms
+  g303AccentOn = accent ? 0.08f : 0.0f;              // AcidBox accent level CC default
+  g303Gate     = 1;
+  if (!legato) {                                     // slides keep the env running
+    g303EnvC = 1.0f;
+    g303EnvA = accent ? 1.024f : 1.0f;
+  }
 }
+
+// Gate closes on a rest (or on stop): 1ms fade, 50ms for accented notes.
+static inline void tbNoteOff() { g303Gate = 0; }
 
 // CHANNEL 2 — a rhythmic pulse layer, not a melodic voice. Fires from
 // advanceStep() whenever ch2Steps[seq.cur] is on, independent of whatever
@@ -2762,7 +2781,7 @@ void advanceStep() {
     bool acc = s.accent || kwForceAccent;
     bool gl  = s.glide  || kwForceGlide;
     triggerNote(ni, acc, gl);
-  } else gVolSub = 500;
+  } else { gVolSub = 500; tbNoteOff(); }
   kwForceAccent = false;
   kwForceGlide  = false;
 
@@ -5002,9 +5021,9 @@ void updateControl() {
 
       // 303 voice housekeeping: keep the filter's resonance skew current and
       // re-init the voice (ladder/HP/phase state) when the sound mode changes.
-      float tbR0 = (gResonance > 0) ? ((float)gResonance * 0.0019569471f) : 0.0f;
-      if (tbR0 > 1.0f) tbR0 = 1.0f;
-      tbSetRes(tbR0);
+      // The 303 filter takes the RES pot linearly (0..1), like AcidBox's own
+      // CC_303_RESO — not the legacy signed gResonance/resCurve mapping.
+      tbSetRes(gTbReso01);
       if (gSound != g303LastSound) { g303LastSound = gSound; tbResetVoice(); }
     }
   }
@@ -5197,9 +5216,18 @@ void updateControl() {
   // Envelope volume decay contribution (pre-calc)
   int16_t volSub4  = (gVolSub > 400) ? 100 : (gVolSub >> 2);
 
+  // RES pot position within this sound's RES range, normalised 0..1: the 303
+  // voice's SetResonance() skew turns it into the filter's feedback. Pot
+  // centre lands near AcidBox's demo value (0.45 -> skewed 0.80, demo 0.84).
+  // gResonance below stays the legacy signed/curved value for COMB/Waveshape.
+  gTbReso01 = (float)mappedRes * (1.0f / 1023.0f);
+
   switch (gSound) {
     case 0: case 1: case 2: case 3:
-      gCutoff   = max(0, mappedCut/4 - volSub4);
+      // No volSub4 here: the 303 voice's cutoff is swept by its own filter
+      // envelope (g303EnvC). Subtracting the amp envelope as well made the
+      // base cutoff fall as each note decayed, double-enveloping the sweep.
+      gCutoff   = mappedCut >> 2;
       gResonance= mappedRes - 512;
       break;
     case 4:
@@ -5222,7 +5250,7 @@ void updateControl() {
         int lfoVal = restrictValue((sinetable[(lfoPos>>10)&255]<<2)+8, 128, 128-(mappedCut>>3));
         phaseSw = (uint8_t)lfoVal; lfoOffset = phaseSw;
       }
-      gCutoff   = max(0, (rawCut>>2) - volSub4);
+      gCutoff   = rawCut >> 2;
       gResonance= rawResOrig - 512;
       break;
     case 9:
@@ -5231,7 +5259,7 @@ void updateControl() {
       // mappedRes (0-1023, reversed) -> filter resonance (shared LPF).
       subFreq = (uint16_t)max(1, gFreq >> 1);  // one octave below carrier
       subMix  = (uint16_t)constrain(mappedCut, 0, 1023);
-      gCutoff   = max(0, (rawCut>>2) - volSub4);
+      gCutoff   = rawCut >> 2;
       gResonance= rawResOrig - 512;
       break;
     case 10:
@@ -5990,7 +6018,7 @@ static inline float tbProcess(float in) {
 // Wipe oscillator/filter/envelope state (sound change, setup)
 static void tbResetVoice() {
   g303Phase = 0.0f; g303SubPhase = 0.0f;
-  g303EnvC = 0.0f; g303EnvA = 0.0f; g303AccentOn = 0.0f;
+  g303EnvC = 0.0f; g303EnvA = 0.0f; g303AccentOn = 0.0f; g303Gate = 0;
   g303CutCV = 250.0f; g303AmpLP = 0.0f; g303NoisePtr = 0;
   g303y1 = g303y2 = g303y3 = g303y4 = 0.0f;
   g303Fbhx = g303Fbhy = 0.0f;
@@ -6036,10 +6064,16 @@ static void tbInitVoice() {
 
 // One sample of the 303 voice, returned as 8-bit (0-255, 128-centered)
 static inline uint8_t computeAcid303Sample() {
-  // Exponential envelopes: per-sample multiplicative decay = the 303's
-  // capacitor-discharge curve
+  // Amp envelope: capacitor-discharge decay to the 0.2 sustain, held there for
+  // as long as the gate is open, then a fast release. The filter envelope is
+  // a plain decay — as in AcidBox, the amp outlasts the sweep.
   g303EnvC *= g303DecayC;
-  g303EnvA *= g303DecayA;
+  if (g303Gate) {
+    g303EnvA = g303Sust + (g303EnvA - g303Sust) * g303DecayA;
+  } else {
+    g303EnvA *= g303RelC;
+    if (g303EnvA < 0.0005f) g303EnvA = 0.0f;
+  }
   g303AmpLP += 0.08f * (g303EnvA - g303AmpLP);   // amp declick (~200Hz)
 
   // Oscillator. Phase step = gFreq/65536 cycles-per-sample x 1024 table units
@@ -6065,10 +6099,12 @@ static inline uint8_t computeAcid303Sample() {
   }
 
   // Cutoff CV: pot (0..255) -> 250..4000Hz exponential, then the AcidBox env/
-  // accent mult: base * (EnvMod*(envC - 0.2) + 1.3*accentation + 1), EnvMod
-  // fixed at 0.5. Smoothed to keep pot zipper and env steps off the audio.
+  // accent mult: base * (EnvMod*(envC - 0.2) + 1.3*accentation + 1). EnvMod is
+  // the value AcidBox's built-in sequencer runs (CC 100/127), not the 0.5
+  // library default — it is most of the sweep depth. Smoothed to keep pot
+  // zipper and env steps off the audio.
   float baseCut = 250.0f * expf(2.7725887222f * (float)gCutoff * (1.0f / 255.0f));
-  float target  = baseCut * (0.5f * (g303EnvC - 0.2f) + 1.3f * g303AccentOn + 1.0f);
+  float target  = baseCut * (0.787f * (g303EnvC - 0.2f) + 1.3f * g303AccentOn + 1.0f);
   if (target < 200.0f)  target = 200.0f;
   if (target > 3919.0f) target = 3919.0f;    // 16384/4.18 — filter stability limit
   g303CutCV += 0.08f * (target - g303CutCV);
@@ -6082,8 +6118,13 @@ static inline uint8_t computeAcid303Sample() {
   s = tbShape(g303DrvPre * s * 2.0f) * g303DrvPost;
   s *= g303AmpLP;
 
-  // To 8-bit out
-  float v = 128.0f + s * 100.0f;
+  // AcidBox output stage: the voice runs ~1.4x into fast_shape (the same cubic
+  // shaper) before the mix, which is where a lot of its thickness comes from.
+  // The port used to feed the raw voice into an 8-bit hard clamp instead, so
+  // loud notes just lost their tops. 118/128 leaves the drum mix headroom.
+  s = tbShape(s * 1.4f);
+
+  float v = 128.0f + s * 118.0f;
   if (v < 0.0f) v = 0.0f; else if (v > 255.0f) v = 255.0f;
   return (uint8_t)v;
 }
