@@ -2,7 +2,7 @@
 
 > 记录 Acid Drip 固件在 git HEAD 基础上的所有改动 + 已定位的待修问题。
 > 更新日期：2026-10-29 ｜ 编译验证：✅ **GitHub Actions 全绿**（见 §8）｜ FQBN `rp2040:rp2040:rpipico` ｜ 采样率 16384Hz
-> 当前 HEAD：`7243650`（领先上游 `origin/main` = `f88e64d` 8 个提交）
+> 当前分支：`main`（领先上游 `origin/main` = `f88e64d` 10 个提交）
 
 ---
 
