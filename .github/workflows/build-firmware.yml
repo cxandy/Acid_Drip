@@ -1,0 +1,82 @@
+name: Build firmware
+
+# 编译两套固件并把 UF2 作为 artifact 上传。
+# 触发：推送到 main / 任意 PR / 手动触发。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: arduino-cli / rp2040
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install arduino-cli
+        uses: arduino/setup-arduino-cli@v2
+        with:
+          arduino-cli-version: 1.1.1
+
+      - name: Install RP2040 core
+        run: |
+          arduino-cli version
+          arduino-cli core update-index
+          arduino-cli core install arduino:rp2040
+          arduino-cli core list
+
+      - name: Install libraries
+        # Mozzi 2.0.4 (pulls FixMath automatically), Adafruit GFX, Adafruit ILI9341
+        run: |
+          arduino-cli lib install "Mozzi" "Adafruit GFX Library" "Adafruit ILI9341"
+          arduino-cli lib list
+
+      # ── 变体 A：原版声音 ──────────────────────────────────────────────
+      # Sketch 文件夹名与主 .ino 同名，可直接编译。
+      - name: Compile variant A (original sound)
+        run: |
+          arduino-cli compile \
+            --fqbn rp2040:rp2040:rpipico \
+            --warnings default \
+            --build-property "build.path=${{ github.workspace }}/build/variant_a" \
+            Firmware/Acid_Drip_Drum_Acid_Drift_V5
+
+      # ── 变体 B：AcidBox 303 ───────────────────────────────────────────
+      # 文件夹名 (Acid_Drip_V5_AcidBox) 与主 .ino 名 (Acid_Drip_V5_Drum_Acid_Drift)
+      # 不一致，先复制成同名目录再编译，保证任何 arduino-cli 版本都接受。
+      - name: Stage variant B sketch
+        run: |
+          mkdir -p build/sketches
+          cp -r Firmware/Acid_Drip_V5_AcidBox build/sketches/Acid_Drip_V5_Drum_Acid_Drift
+          ls -l build/sketches/Acid_Drip_V5_Drum_Acid_Drift
+
+      - name: Compile variant B (AcidBox 303)
+        run: |
+          arduino-cli compile \
+            --fqbn rp2040:rp2040:rpipico \
+            --warnings default \
+            --build-property "build.path=${{ github.workspace }}/build/variant_b" \
+            build/sketches/Acid_Drip_V5_Drum_Acid_Drift
+
+      - name: Collect UF2 binaries
+        run: |
+          mkdir -p dist
+          cp build/variant_a/*.uf2 dist/Acid_Drip_V5_Original_Sound.uf2
+          cp build/variant_b/*.uf2 dist/Acid_Drip_V5_AcidBox_303.uf2
+          ls -l dist
+          sha256sum dist/*.uf2
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: acid-drip-firmware
+          path: dist/*.uf2
+          if-no-files-found: error
