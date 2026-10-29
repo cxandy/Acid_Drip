@@ -8,6 +8,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -24,19 +27,43 @@ jobs:
       - name: Install arduino-cli
         uses: arduino/setup-arduino-cli@v2
         with:
-          arduino-cli-version: 1.1.1
+          version: 1.1.1
 
+      # RP2040 核心不在 Arduino 默认索引里，必须加 Philhower 的额外索引 URL。
+      # 该索引里的包名是 rp2040，所以核心 id 是 rp2040:rp2040，
+      # FQBN 也就是 rp2040:rp2040:rpipico（不是 arduino:rp2040）。
       - name: Install RP2040 core
         run: |
           arduino-cli version
+          arduino-cli config init --overwrite
+          arduino-cli config set board_manager.additional_urls \
+            https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+          arduino-cli config dump
           arduino-cli core update-index
-          arduino-cli core install arduino:rp2040
+          arduino-cli core install rp2040:rp2040
           arduino-cli core list
 
-      - name: Install libraries
-        # Mozzi 2.0.4 (pulls FixMath automatically), Adafruit GFX, Adafruit ILI9341
+      - name: Install Adafruit libraries
         run: |
-          arduino-cli lib install "Mozzi" "Adafruit GFX Library" "Adafruit ILI9341"
+          arduino-cli lib install "Adafruit GFX Library" "Adafruit ILI9341"
+          arduino-cli lib list
+
+      # Mozzi 走 Library Manager；万一索引里那个条目取不到，直接从
+      # sensorium/Mozzi 的 v2.0.4 源码树装（仓库根目录就是 library.properties）。
+      - name: Install Mozzi
+        run: |
+          if arduino-cli lib install "Mozzi@2.0.4"; then
+            echo "Mozzi installed from the library index"
+          else
+            echo "Library index install failed, falling back to the GitHub source tree"
+            mkdir -p "$HOME/Arduino/libraries"
+            curl -sSL -o /tmp/mozzi.zip https://github.com/sensorium/Mozzi/archive/refs/tags/v2.0.4.zip
+            rm -rf /tmp/mozzi && mkdir -p /tmp/mozzi
+            unzip -q /tmp/mozzi.zip -d /tmp/mozzi
+            rm -rf "$HOME/Arduino/libraries/Mozzi"
+            mv /tmp/mozzi/Mozzi-2.0.4 "$HOME/Arduino/libraries/Mozzi"
+            ls "$HOME/Arduino/libraries/Mozzi" | head -20
+          fi
           arduino-cli lib list
 
       # ── 变体 A：原版声音 ──────────────────────────────────────────────
