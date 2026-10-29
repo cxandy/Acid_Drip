@@ -353,7 +353,25 @@ uint16_t chainTickCount = 0;      // steps elapsed since the last chain advance
 #define ACCENT_RES_FIXED    200    // accent peak resonance boost (capped at gResCap in the cascade)
 #define ENV_DECAY_NORMAL      5    // SEED: normal env decay divisor (HIGHER = slower/longer sweep)
 #define ACCENT_DECAY_FIXED   10    // accent envelope decay divisor (1-20) — "mid"
-#define ACID_LPF_RESDIV_SEED 200   // SEED: resonance divisor, moderate default in musical range 150-256
+// Resonance divisor for the cascade branch (ACID_LPF_4POLE). The filter
+// computes its resonance coefficient as effRes / gResDiv, so a HIGHER
+// divisor means LESS resonance.
+//
+// ── 2026-10-30: SEED RAISED 200 -> 256 (match the old engine) ───────────
+// The removed "Original_Sound" variant computed the SAME coefficient as
+// effRes / 256. With the 200 seed the coefficient runs up to 206/200 =
+// 1.03 for the default SAW, i.e. past 1.0 the stage self-oscillates and
+// squelches — a harsher, less controllable version of the old sound.
+// At 256 the default SAW tops out at 206/256 = 0.80, exactly what the
+// old firmware produced, so the RES pot feels the same as it did before
+// and cannot run away.
+//
+// gResDiv is NOT persisted in EEPROM (FilterSettings stores envCut,
+// decayDiv and cutMax only), so this seed always applies at boot.
+//
+// The HP branch (ACID_LPF_HP) does not use gResDiv at all — its
+// resonance is the Q8 gAcidResCoeffQ8 straight off the RES pot.
+#define ACID_LPF_RESDIV_SEED 256   // = the old engine's effRes/256 scaling
 
 // ---- Runtime-tweakable filter params (SETTINGS mode: hold pads 1+2+3) ------
 // These start at the SEED values above and are overwritten by EEPROM on boot
@@ -800,7 +818,44 @@ volatile int16_t filtA2 = 0, filtB2 = 0;
 // filter's flat ~3.5 dB) and makes drive usable. RES trades a little body for
 // the peak (gResTrim) — correct resonant-filter behaviour. Set to 0 to fall
 // back to the 8-bit cascade above for an instant A/B on hardware.
-#define ACID_LPF_HP 1
+//
+// ── 2026-10-30: SET TO 0 (old-engine sound profile) ─────────────────────
+// The HP branch is the newest filter in the tree and it is BRUTAL by
+// design: Q8 int32 states, 24 dB/oct, a resonance coefficient that can
+// reach 1.05 (self-oscillating) and a HARD +/-127 clip on the peak —
+// the source calls it "scream flavour C", and the comment above says the
+// harsh clipping IS the 303 scream. On hardware it reads as harsh and
+// fatiguing rather than as a classic acid bass, especially with the
+// default pattern (16 steps, all on, chromatic, C root, no accent).
+//
+// Setting ACID_LPF_HP to 0 falls through to the ACID_LPF_4POLE branch —
+// two cascaded 2-pole SVF stages, 24 dB/oct, NO hard clip on the peak
+// and a resonance ceiling (gResCap) that keeps it from self-oscillating
+// into a squeal. That is the upstream author's own documented A/B
+// switch ("Set to 0 to fall back to the 8-bit cascade above for an
+// instant A/B on hardware").
+//
+// Together with ACID_LPF_RESDIV_SEED below, this reproduces the sound
+// of the removed "Original_Sound" variant (the UF2 that used to sit in
+// build_out_orig/): same resonance scaling, same knob feel, but with
+// the steeper 24 dB/oct slope and without the hard-clip bite.
+//
+// TWO KNOB DIRECTIONS FLIP when the HP branch is off — RES now works
+// the classic way:
+//
+//   ACID_LPF_HP = 1 (upstream default)
+//     RES CCW  -> HP resonance max (gAcidResCoeffQ8 0.08..1.05) -> scream
+//     RES CW   -> HP resonance min, plus gResTrim 110 (full body)
+//   ACID_LPF_HP = 0 (this build)
+//     RES CW   -> classic filter resonance max (gResonance +206)
+//     RES CCW  -> classic resonance min (gResonance -312)
+//
+// Also note: the SETTINGS mode RES lane (pads 1+9) drives gHpCutMax,
+// which only feeds the HP branch — with the HP branch off that lane
+// becomes inert. The CUT and DECAY lanes still work (filter envelope
+// sweep depth and speed). Set ACID_LPF_HP back to 1 to restore all of
+// it.
+#define ACID_LPF_HP 0
 #define ACID_HP_CUT_MAX  170   // HP cutoff ceiling. Scream flavour "C": raised from 150 so DPTH opens
                                // brighter and the resonant peak sits high enough to bite when hard-
                                // clipped, still short of the Nyquist alias-squeak zone.
