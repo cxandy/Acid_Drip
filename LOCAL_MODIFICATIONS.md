@@ -13,6 +13,7 @@
 | 阶段 0 修复（跨核双渲染） | ✅ 代码已改，**CI 编译通过** |
 | 硬件变体支持（GP8 / GP2 运行时切换） | ✅ 变体 A、B 均已实现并编译通过 |
 | 文档一致性（README / 说明书） | ✅ 已对齐代码 |
+| 酸音滤波器音档 | ✅ 已切回「旧引擎音档」（见 §3.4）|
 | 编译验证 | ✅ **GitHub Actions 全部通过**（见 §8） |
 | 固件产物 | ✅ CI 产出的两个 UF2（见 §8.2） |
 | 与上游合并 | 零冲突已实测，但上游工作流会覆盖 PR（见 §9） |
@@ -181,6 +182,42 @@ if (gSyncPin != SYNC_PIN_GP2 || !syncMode) bmStartAudio();
 | **编译（变体 A）** | ✅ **通过**——GitHub Actions，见 §8 |
 | **编译（变体 B）** | ✅ **通过**——GitHub Actions，见 §8 |
 
+### 3.4 酸音滤波器：切回「旧引擎音档」（2026-10-30）
+
+实测反馈：变体 A 开机播默认酸音**刺耳、难听**。查证结论——**不是同步/双渲染改动造成的**，
+正常模式下酸音通路与上游**逐行一致**（上游自己的注释：*"NORMAL MODE: acid only, on the
+exact proven 8-bit path (byte-identical to before DRIFT-in-sync existed)"*）。
+真正原因是**换了引擎**，且默认编译下酸音走的是最新的 HP 滤波分支：
+
+| | 旧 `Original_Sound` 变体（已删） | 变体 A 默认 | 变体 A 现在的音档 |
+|---|---|---|---|
+| 滤波 | 单级 2 极 SVF，12 dB/oct | 双级联 Q8 int32，24 dB/oct | 同左，但**无硬削波** |
+| 峰值 | 自然限幅 | **±127 硬削波**（源码称 "scream flavour C"）| 级联软限幅 + `gResCap` 防自激 |
+| 共振系数 | `effRes / 256` | `gAcidResCoeffQ8` 0.08–1.05（可自激）| `effRes / gResDiv`，`gResDiv` = 256 |
+| 运行时可调 | 无 | SETTINGS 模式 | CUT / DECAY 两路可用，RES 那路空转 |
+
+改动只有两个 define：
+
+| 位置 | 改前 | 改后 | 作用 |
+|---|---|---|---|
+| `ACID_LPF_HP` | `1` | `0` | 落到 `ACID_LPF_4POLE` 分支：**去掉 ±127 硬削波**，峰值不再咬 |
+| `ACID_LPF_RESDIV_SEED` | `200` | `256` | 共振系数 `effRes/gResDiv` 对齐旧引擎的 `effRes/256` |
+
+`200 → 256` 这一步很关键：级联分支的系数是 `effRes/gResDiv`，种子 200 时默认 SAW 能到
+`206/200 = 1.03`（>1 → 级自激尖啸），256 时封顶 `206/256 = 0.80`，与旧固件完全一致。
+`gResDiv` **不存 EEPROM**（`FilterSettings` 只存 `envCut`/`decayDiv`/`cutMax`），种子一定生效。
+
+这两个开关都是**上游作者自己留下的 A/B 通道**（源码注释：*"Set to 0 to fall back to the
+8-bit cascade above for an instant A/B on hardware"*）。
+
+> ⚠️ **两个副作用**：
+> 1. **RES 旋钮方向反转**。HP 档下逆时针 = HP 共振最大（scream）；关掉 HP 后**顺时针 = 经典共振最大**。
+> 2. **SETTINGS 模式（按 1+9）的 RES 那路变空转**——它驱动的 `gHpCutMax` 只喂 HP 分支。
+>    CUT（包络扫频深度）和 DECAY（扫频速度）两路照常可用。
+>
+> 想切回上游默认音档：把 `ACID_LPF_HP` 改回 `1`、`ACID_LPF_RESDIV_SEED` 改回 `200`，
+> CI 重编一版即可。
+
 ---
 
 ## 4. 同步时钟模型与已知限制
@@ -304,12 +341,18 @@ B 的 `analogWrite(gSyncPin, duty)` + `analogWriteFreq()` 与 `PWMAudio bmPWM(2)
   后者只改了链接步骤看到的路径，而核心归档仍写在 arduino-cli 自己的内部目录里，
   链接会报 `ld: cannot find <build.path>/core/core.a`。
 
-### 8.2 编译结果（run 40877867285，全绿）
+### 8.2 编译结果
+
+最新：run `40972460342`（旧引擎音档，全绿）。
 
 | 变体 | Flash | RAM | 产物 |
 |---|---|---|---|
 | A 原版声音 | 152772 B（7%）| 57468 B（21%）| `Acid_Drip_V5_Original_Sound.uf2` |
 | B AcidBox 303 | 153172 B（7%）| 70048 B（26%）| `Acid_Drip_V5_AcidBox_303.uf2` |
+
+> **UF2 不是逐字节可复现的**：`ar` 归档会内嵌成员时间戳，同一份源码两次构建的哈希也不同。
+> 所以判断「变体改了没有」要看源码 diff，不要看 UF2 哈希。变体 A 的音档切换确实生效，
+> 已用 `git diff` 核对（两次构建之间只有变体 A 的 `.ino` 变化）+ UF2 哈希变化双重确认。
 
 除 Mozzi 库自身的 `#warning`（RP2040 平台未实现自动随机种子）外**无任何警告**。
 变体 B 的 sketch 文件夹名与主 .ino 名不一致，CI 里先复制成同名目录再编译。
