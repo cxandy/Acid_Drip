@@ -1,80 +1,330 @@
 # 本地改动清单 / Local Modifications
 
-> 记录 Acid Drip V5 自 git HEAD（`3738a4a`，原始上传版）以来的所有固件 + 文档改动。
-> 日期：2026-09-28 ｜ 编译器：arduino-cli，FQBN `rp2040:rp2040:rpipico` ｜ 采样率 16384Hz
+> 记录 Acid Drip 固件在 git HEAD 基础上的所有改动 + 已定位的待修问题。
+> 更新日期：2026-10-29 ｜ 编译器：**未安装**（本轮无 arduino-cli / rp2040 core）｜ FQBN `rp2040:rp2040:rpipico` ｜ 采样率 16384Hz
+> 当前 HEAD：`f8f5f7c`（领先上游 `origin/main` = `f88e64d` 5 个提交），**本文件的全部改动尚未提交**
 
 ---
 
-## 1. 同步引脚改动（两个声音方案工程都已改）
+## 0. 状态速览
 
-根因：原版固件中 GP2 同时承担 **鼓+DRIFT 音频** 和 **同步时钟** 两个职能，
-同步模式下 GP2 被改为时钟 I/O，且 `if (!syncMode) bmStartAudio();` 跳过鼓音频，
-于是**任何同步模式下鼓/DRIFT 全哑**。
+| 项目 | 状态 |
+|---|---|
+| 阶段 0 修复（跨核双渲染） | ✅ 代码已改，**静态验证通过，未编译** |
+| 硬件变体支持（GP8 / GP2 运行时切换） | ✅ 变体 A、B 均已实现 |
+| 文档一致性（README / 说明书） | ✅ 本轮已对齐代码 |
+| 编译验证 | ❌ **未做**——本机无 arduino-cli / rp2040 core |
+| 变体 A 的 UF2 | ❌ **仓库里两个 UF2 都不对应变体 A**（见 §8） |
+| 与上游合并 | 零冲突已实测，但上游工作流会覆盖 PR（见 §9） |
 
-| 项目 | 旧 | 新 |
+---
+
+## 1. 同步引脚：运行时选择（核心设计）
+
+### 1.1 问题背景
+
+原版固件里 **GP2 同时承担「鼓 + DRIFT 音频」和「同步时钟」两个职能**，靠板载 SPDT 开关分时复用。
+上游的规避手段是 `if (!syncMode) bmStartAudio();`——**任何同步模式下鼓与 DRIFT 全哑**。
+
+本 fork 的硬件改动是：**LCD RST 由 GP8 跳线到 3V3，腾出 GP8 做同步**，GP2 专归音频。
+
+### 1.2 最终方案：单固件 + 开机菜单
+
+不编译期宏，不刷两次。**同一个 UF2 同时兼容改装板和原版 PCB**，开机时用 pad 选。
+
+| 变量 / 常量 | 位置 | 说明 |
 |---|---|---|
-| SYNC_IN | GP2 | **GP8** |
-| SYNC_OUT | GP2 | **GP8**（同一插座，方向开机菜单选）|
-| 鼓音频启动 | `if (!syncMode) bmStartAudio();` | **无条件 `bmStartAudio();`** |
-| 同步模式下鼓/DRIFT | 全哑 | **保持有声** |
+| `uint8_t gSyncPin = SYNC_PIN_GP8;` | A:1434 / B:1283 | 运行时同步引脚，默认 GP8 |
+| `#define SYNC_PIN_GP8 8` | A:491 / B:351 | 改装板 |
+| `#define SYNC_PIN_GP2 2` | A:492 / B:352 | 原版 PCB |
+| `PAD_SYNC_GP8_IN/OUT`、`PAD_SYNC_GP2_IN/OUT` | A:540-543 / B:397-400 | 开机菜单 4 个选项的 pad 编号（0/1/2/3）|
 
-- 物理改动：LCD RST 原占 GP8，已跳线到 **3V3** 腾出 GP8。
-- 开机按住 **pad 14（SW14 = 物理 pad 14 = GP9）** 出同步菜单：**pad 1 = Sync In**、**pad 2 = Sync Out**。
-- 开机确认文案已改为 "external clock on GP8" / "clock output on GP8"。
-- 该模式不存 EEPROM，每次开机手势决定；鼓机屏幕会显示 "SYNC"。
+**开机手势**：按住 **pad 14（GP9）** 开机 → 青色 **SYNC SETUP** 菜单 → 按下列 pad 之一：
 
-## 2. 声音方案（二选一，各烧各的 UF2）
+| Pad | `gSyncPin` | 方向 | 适用硬件 |
+|---|---|---|---|
+| pad 1 | GP8 | Sync In | 改装板 |
+| pad 2 | GP8 | Sync Out | 改装板 |
+| pad 3 | GP2 | Sync In | 原版 PCB（SPDT 拨到 SYNC 档）|
+| pad 4 | GP2 | Sync Out | 原版 PCB（SPDT 拨到 SYNC 档）|
+
+**什么都不按 = 鼓模式**，`gSyncPin` 保持默认 GP8，`syncMode = false`。
+
+> 向后兼容：pad 1 / pad 2 的语义与原两选项菜单完全一致（= GP8），老用户无需改变习惯。
+
+### 1.3 为什么 `TFT_RST` 保持 8
+
+`TFT_RST` 在两个变体里都保留 **8**，不改 -1：
+
+- **改装板**：LCD 的 RST 线已跳 3V3，驱动 GP8 做复位脉冲打不到面板，**无害**；
+- **原版 PCB**：LCD 的 RST 线确实在 GP8，驱动它复位是**必需**的。
+
+正因为同步引脚改成运行时变量，一份固件才能同时服务两块板。
+
+### 1.4 错配的症状（重要）
+
+菜单四个选项始终都显示，**软件无法自动识别板型**，选错会有明显症状：
+
+| 硬件 | 误选 | 症状 | 正确选项 |
+|---|---|---|---|
+| 原版 PCB | pad 1 / pad 2（GP8）| GP8 是 LCD 复位脚，被配成 `INPUT_PULLDOWN` 后**屏幕全黑**；时钟也没接到任何插口 | pad 3 / pad 4 |
+| 改装板 | pad 3 / pad 4（GP2）| GP2 没接同步插口，**时钟打到鼓/DRIFT 音频输出**；该模式下鼓静音 | pad 1 / pad 2 |
+
+---
+
+## 2. 阶段 0 修复：跨核双渲染（🔴 P0）
+
+### 2.1 问题链条
+
+fork 把 `bmStartAudio()` 改成**无条件调用** → `bmAlarmStarted = true` → `BeatMachine2.ino:2305`
+的守卫 `if(!bmAlarmStarted) return;` **失效** → **core 1 开始渲染 drums + DRIFT 进 GP2**；
+与此同时 core 0 的 `updateAudio()` 里 `if (!syncMode)` 的 fold 分支**也渲染一遍**折进 GP15。
+
+原设计的 fold 分支注释明确写着它依赖 *"in sync mode bmStartAudio() is skipped"*——fork 把这个前提改掉了。
+
+后果：两个核**同时推进同一份** DRIFT echo/verb 静态状态与鼓 voice 包络/滤波状态（数据竞争）；
+鼓声翻倍且相位不一致；MIX EDIT trim 被应用两次；物理混合电位器在同步模式下再也关不掉鼓声。
+
+### 2.2 修法：运行时条件分支（不是删除）
+
+删除 fold 分支会**破坏原版 PCB 的同步行为**（那里 GP2 就是时钟脚，鼓必须折到 GP15 才听得见）。
+所以改成按 `gSyncPin` 运行时判定：
+
+```c
+// A:6625
+if (gSyncPin == SYNC_PIN_GP2 && syncMode) {
+    // 原版 PCB：GP2 被时钟占用，鼓+DRIFT 折到 GP15
+    ...
+}
+```
+
+配套地，`bmStartAudio()` 改成有条件调用（**setup 与 doModeSwitch 两处都要改**）：
+
+```c
+// A:5097, A:6787 / B:4692, B:6338
+if (gSyncPin != SYNC_PIN_GP2 || !syncMode) bmStartAudio();
+```
+
+于是形成两种**互斥且各自安全**的拓扑：
+
+| `gSyncPin` | `syncMode` | 谁渲染鼓/DRIFT | 跨核安全性 |
+|---|---|---|---|
+| GP8 | true / false |  只有 core 1（→ GP2）| ✅ `bmStartAudio()` 执行，`bmAlarmStarted = true`，core 1 独占渲染 |
+| GP2 | true |  只有 core 0（→ GP15，fold）| ✅ `bmStartAudio()` 被跳过，`bmAlarmStarted` 保持 false，core 1 的 `bmFillDrumBufferTo()` 直接 early-return |
+| GP2 | false |  只有 core 1（→ GP2）| ✅ 同第一行 |
+
+> 关键不变式：**`bmAlarmStarted` 为真 ⟺ 鼓由 core 1 渲染；为假 ⟺ 鼓由 core 0 的 fold 分支渲染。**
+> 两条路径永不同步执行 → 没有数据竞争，也不会电平翻倍。
+
+### 2.3 变体 B 的差异（未做，需 rebase 后处理）
+
+变体 B 的 `updateAudio()` **没有 fold 分支**，所以：
+
+- B 的 **GP8 模式**：鼓/DRIFT 照常走 GP2，有声 ✅（与 A 一致）
+- B 的 **GP2 模式**：GP2 被时钟占用，**鼓静音**（= 原版行为），因为 B 里没有 fold 分支可用
+
+要修需从 B 的 `BeatMachine2.ino` 抽取 `bmRenderDrumSample()` 到 core 0 可调的位置，
+风险高且 B 反正要 rebase，**本轮不动**，已在代码注释与本文档中标注差异。
+
+---
+
+## 3. 阶段 0 其他改动
+
+### 3.1 代码
+
+| 改动 | 位置 | 说明 |
+|---|---|---|
+| 新增 `gSyncPin` 运行时变量 | A:1434 / B:1283 | 替换原来所有编译期 `SYNC_IN` / `SYNC_OUT` 宏 |
+| 新增 `SYNC_PIN_GP8` / `SYNC_PIN_GP2` | A:491-492 / B:351-352 | |
+| 新增 4 个 `PAD_SYNC_*` 常量 | A:540-543 / B:397-400 | 开机菜单选项 |
+| 开机菜单扩为 4 项 SYNC SETUP | A:6720-6764 / B:6270-6316 | pad1/2 保持向后兼容 |
+| 开机提示动态显示 GP8/GP2 | A:6761 / B:6313 | 原来写死 GP2 |
+| `bmStartAudio()` 条件化 | A:5097, A:6787 / B:4692, B:6338 | 见 §2.2 |
+| fold 分支改运行时条件 | A:6625 | 见 §2.2 |
+| 重新引入 `bmRenderDrumSample` 声明 | A:238 | 带 `__not_in_flash_func`，**消除与 `BeatMachine2.ino:2313` 定义的属性不一致**（不一致会让 GCC 把函数放进 flash，core 0 音频热路径每采样都 XIP 停顿）|
+| 删 `extern byte bmStepDiv;` | A:229 / B:141 | 全工程无定义（两变体都已清）|
+| 删 `bool syncIn` | 主 sketch | 死变量，从未使用 |
+| `BENCH_AUDIO_HEADROOM` 默认关闭 | A:148-159 | 原为 `1`（注释自称 "this isn't meant to ship"），改为 `#ifndef` 编译期开关，测量构建可 `-DBENCH_AUDIO_HEADROOM=1` 打开 |
+| 头部注释 ACCENT EDIT→MIX EDIT | 主 sketch | 代码实为 MIX EDIT（`mixEditMode`），注释是 V4 遗留 |
+| 头部接线注释对齐 | A:90-100 | 接线表 + SYNC SETUP 菜单说明 |
+| 清理 sync 过期注释 | 主 sketch | 原描述旧 GP2 拓扑的约 40 行（含把开机手势误写为 "pads 14+13"——实际是**单独按 pad 14**）|
+| Drift.ino 跨核归属注释 | Drift.ino | 原写"只有一个核调用"但主 sketch 有第二调用点，已随 fold 条件化补注说明 |
+| Drift.ino "与鼓互斥"注释 | Drift.ino | 实际是 `mix += drift` 相加 |
+
+### 3.2 文档（本轮同步）
+
+| 文件 | 修正内容 |
+|---|---|
+| `README.md` | 顶部摘要 / 硬件表 / 接线块 / **整个 Sync 章节重写**：菜单名 `SYNC MODE`→`SYNC SETUP`、四选项表、双板对应关系、错配症状、PPQN 说明 |
+| `说明书.md` | 顶部摘要 / 接线块 / 音频路径表 / **§三 开机与模式选择**（四选项表）/ **§八 同步模式详解**（重写）/ §10.2-10.4 排查 / §11.3 编码说明 / §十二 规格速查 |
+| `LOCAL_MODIFICATIONS.md` | 本文件，全量重写 |
+
+**本轮在文档里纠正的两处事实错误**：
+
+1. **脉冲率**：原文写「24 PPQN，每四分音符 24 个脉冲，符合 TB-303 / 808 / 909 标准」——**错的**。
+   实际 `SYNC_STEPS_PER_PULSE = 4`，而 `bpm2us(b) = 60000000/b/4`（16 分音符间隔），
+   所以 **1 个门脉冲 = 4 个 16 分步进 = 1 拍 = 1 PPQN**。接入 24 PPQN 源会**跑快 12 倍**、BPM 卡在 300 上限。
+   README 原文的「one gate is sent per sequencer step」同样不准（实际是每 4 步 1 个）。
+2. **脉冲宽度**：原文写 2ms，代码里是 `SYNC_OUT_PULSE_MS = 15`（15ms）。
+
+### 3.3 静态验证结果
+
+| 检查 | 结果 |
+|---|---|
+| 大括号 / 圆括号 / 方括号平衡 | ✅ 变体 A 全部 12 个文件 0 差 |
+| 删除符号的残留引用 | ✅ `bmStepDiv` / `syncIn` / `SYNC_IN` / `SYNC_OUT` 全清零 |
+| 行尾完整性 | ✅ 所有 `.ino` / `.md` 保持原行尾（`.ino` 与 README/说明书 = CRLF 无 BOM；本文件 = LF）|
+| 编码 | ✅ 两个 `.ino` 为干净 UTF-8（U+2014 分别 713 / 661 个，U+9225 乱码 0 个）；本轮文档编辑后 U+9225 仍为 0 |
+| `digitalPinToInterrupt(pin)` 支持运行时变量 | ✅ arduino-pico 定义为 `(pin)`，已查 `cores/rp2040/Arduino.h` |
+| `analogWriteFreq()` 对运行时 pin 安全 | ✅ arduino-pico 的 `analogWriteFreq` 写**全局** `analogFreq`，不按 pin 绑定（已读 `cores/rp2040/wiring_analog.cpp`）|
+| `Adafruit_ILI9341` 支持 `_rst < 0` | ✅ 可退化为 `ILI9341_SWRESET` 软件复位（`Adafruit_ILI9341.cpp:194`）|
+| **编译** | ❌ **未做** |
+
+---
+
+## 4. 同步时钟模型与已知限制
+
+### 4.1 当前模型（DIRECT）
+
+- **SYNC OUT**：`syncOutPulse()` 在每 4 个 16 分步进上拉高一次，`syncOutPoll()` 在
+  `SYNC_OUT_PULSE_MS = 15` ms 后拉低——**真正的数字门脉冲**，与生态里其它合成器一致。
+- **SYNC IN**：`syncPulseISR` 捕获上升沿，测量脉冲间隔并除以 `SYNC_STEPS_PER_PULSE`，
+  **每来一个脉冲 = 1 拍**，内部再细分 4 个 16 分步进。
+
+### 4.2 🔴 只支持 1 PPQN（上游也中招）
+
+```
+SYNC_STEPS_PER_PULSE = 4      // 假设外部每拍只发 1 个脉冲
+bpm2us(b)            = 60000000 / b / 4   // 16 分音符间隔
+```
+
+喂标准 **24 PPQN DIN 同步**（TR-808 / 909 / TB-303）时：
+
+```
+120 BPM, 24 PPQN → 脉冲间隔 41667µs
+seq.interval = 41667 / 4 = 10417µs   ← 实际每 16 分音符应为 125000µs
+→ 音序器跑快 12 倍，BPM 读数被 clamp 到 300
+```
+
+这是上游 issue #5「外部时钟被忽略」的机制（**协议假设不匹配，不是引脚/电平问题**）。
+
+**变体 B 已有 `syncDiv`**（`B:1927`、`B:5819-5829`）支持 1 / 2 / 24 PPQN，但无 UI 入口、需改源码重编译。
+→ 计划：把 `syncDiv` 移植进变体 A 与上游，并加开机菜单项。
+
+### 4.3 ⚠️ 变体 B 的 GP2 同步输出用硬件 PWM
+
+B 的 `analogWrite(gSyncPin, duty)` + `analogWriteFreq()` 与 `PWMAudio bmPWM(2)` 可能抢同一个 PWM slice。
+仅在 **GP2 模式**下出现——而该模式下 `bmStartAudio()` 被跳过，PWMAudio 未 `begin()`，理论上不冲突。
+**未经硬件实测。**
+
+---
+
+## 5. 声音方案（二选一，各烧各的 UF2）
 
 ### A. 原版声音 — `Firmware/Acid_Drip_Drum_Acid_Drift_V5/`
-- = 上游最新代码（原版酸音引擎）+ 同步改动（GP8、无条件 `bmStartAudio()`）+ MADCTL `0x40` 显示修复。
-- 编译产物不进 git，用 arduino-cli 自行编译。
+= 上游最新代码（原版酸音引擎）+ 同步改动（运行时 `gSyncPin`、SYNC SETUP 四选项）+ MADCTL `0x40` 显示修复。
+主 sketch 7280 行，另有 `BeatMachine2.ino`(2440) / `Drift.ino`(649) / `beats.h` / `sample0-7.h`。
 
 ### B. AcidBox 303 移植版 — `Firmware/Acid_Drip_V5_AcidBox/`
 - 主 `.ino` 内嵌 AcidBox 303 引擎移植（synthVoice / rosic TeeBee 滤波器 / overdrive / 波形表）。
-- 基于旧版代码分支，保留 24 PPQN 硬件 PWM 同步输出。
+- **基于旧版上游分支**（`3738a4a` 那一代），保留 24 PPQN 硬件 PWM 同步输出。
+- 相对当前上游**缺失** 6 块功能（见 §6.2），需 rebase 后才适合向上游贡献。
+- 主 sketch 6648 行。
 
-**编码注意**：原版声音 `.ino` 注释里的破折号是字面乱码 `鈥?`（U+9225 + `?`），
-303 版是标准 `—`（U+2014）。编辑时须按各文件实际字节匹配，不可互相套用。
+---
 
-## 3. 音频引脚分配（最终状态）
+## 6. 已定位、尚未修复的问题
+
+### 6.1 🔴 同步输入只支持 1 PPQN
+见 §4.2。
+
+### 6.2 🟡 变体 B 相对当前上游缺失的功能
+
+| 缺失 | 符号 | 上游引用数 |
+|---|---|---:|
+| SETTINGS 模式 | `setEditMode` | 19 |
+| 共振分频 | `gResDiv` | 12 |
+| 包络归一化 | `gEnvCutNorm` | 10 |
+| Q8 共振系数 | `gAcidResCoeffQ8` | 6 |
+| 4 极级联 / 高精度 HP | `ACID_LPF_4POLE` / `ACID_LPF_HP` | 3 / 3 |
+| ISR 时间戳同步输入 | `gSyncPulseMicros` | 4 |
+
+变体 B 自身待修：`B:6012` 每采样调 `expf()`；`B:4947` RES 负半程在 303 音色上无效；
+`g303AmpLP` 仅在换音色时复位导致同音色连发 amp env 不从 0 重启。
+
+### 6.3 🟡 变体 B 的 GP2 模式没有 fold 分支
+见 §2.3。
+
+### 6.4 🟡 其他
+
+- 上游 issue #8「FX 切换爆音」未处理。
+- 上游**无 LICENSE 文件**（GitHub `license: null`），公开再分发前需确认授权。
+- 仓库跟踪了 39 个 KiCad 备份 zip（`.gitignore` 后加，管不住已提交文件）。
+- `Acid_Drip_PCB- Kicad/Acid_Synth/Acid_Synth.zip`（222KB）已从 git 删除但仍留在磁盘上。
+- `Acid_Drip_Quick_Reference_Guide_GP8.pdf` 是只讲 GP8 的旧速查卡，**未包含四选项菜单**，本轮未重新生成（缺 PDF 生成工具链）。
+  上游原版速查卡 `Acid_Drip_Quick_Reference_Guide.pdf` 未改动。
+
+---
+
+## 7. 音频引脚分配
 
 | 信号 | 引脚 | 说明 |
 |---|---|---|
 | ACID 音频 | **GP15** | Mozzi `MOZZI_AUDIO_PIN_1 15`，100R + 10nF RC 后到 3.5mm |
 | 鼓 + DRIFT 音频 | **GP2** | `PWMAudio bmPWM(2)`；DRIFT 加性混入鼓缓冲，470R 后到 3.5mm |
-| 同步 IN/OUT | **GP8** | 同一插座，方向由开机菜单选择 |
-| TFT RST | 3V3 | 从 GP8 改跳 3V3 |
-| 混合 | 物理电位器 | PCB 上合成 GP15 vs GP2；电位器拧到 ACID 端会**短路 GP2** |
+| 同步 IN/OUT | **GP8 或 GP2** | **运行时选择**（见 §1.2）|
+| TFT RST | GP8（改装板已跳 3V3）| 两个变体的 `TFT_RST` 都保持 8 |
+| 混合 | 物理电位器 | PCB 上混合 GP15 vs GP2；电位器拧到 ACID 端会**短路 GP2** |
 
-## 4. 排查结论：MIX EDIT 里"只剩 ACID 有声"
+---
 
-1. **鼓机没启动** → 需按 **9+10** 切到鼓模式，再 **1+2** 播放。
-2. **DRIFT 默认关** → 需按 **9+10+11**（0.5s）切到 DRIFT。
-3. **物理混合电位器**拧在 ACID 端 → 短路 GP2，鼓声直接消失。
-4. **MIX EDIT 防误触** → 旋钮必须"动一下"才接管（阈值 24 计数），退出存 EEPROM。
+## 8. 构建产物状态 ⚠️
 
-30 秒验证清单：9+10 → 1+2 ［PLAY］；物理电位器转离 ACID 端；MIX EDIT 里把 RES/DECAY 往右拧。
+| 产物 | 时间 | 实际对应 |
+|---|---|---|
+| `Firmware/build_out/Acid_Drip_V5_Drum_Acid_Drift.ino.uf2` | 2026-09-28 18:17:38 | **变体 B**（含 `g303*` 符号）|
+| `Firmware/build_out_orig/Acid_Drip_V5_Original_Sound.ino.uf2` | 2026-09-28 18:17:12 | **已删除的中间版本**（无 g303）|
 
-## 5. 文档更新
+**变体 A 在这棵树里从未被编译过**——两个 map 都缺失变体 A 独有的全部符号
+（`syncOutPulseOffMs`、`gResDiv`、`bench0_avgUs`、`bmRenderDrumSample`、
+`gEnvCutNorm`、`gSyncPulseMicros` 全部 0 命中）。
 
-- **README.md**：硬件表同步行、接线块、同步章节整段重写为 GP8 + "同步不再静音鼓声"。
-- **Acid_Drip_Quick_Reference_Guide_GP8.pdf**：重新生成的修正版速查卡（原 PDF 同步章节为旧版 GP2 描述）。
-  - 生成脚本：`C:\Users\Rose\AppData\Local\Temp\opencode\make_qr_pdf.py`（fpdf2 生成）。
+→ 现成的两个 UF2 **都不能**代表「原声方案」的当前代码状态。
 
-## 6. 文件清单（本会话产出）
+**编译命令**（需先装 `arduino-cli` + `arduino:rp2040` core）：
 
 ```
-Firmware/Acid_Drip_Drum_Acid_Drift_V5/          # 原版声音（上游最新 + GP8 同步）
-Firmware/Acid_Drip_V5_AcidBox/                 # 303 AcidBox 版（旧分支，同步=GP8）
-Firmware/Acid_Drip_Drum_Acid_V4/               # 上游 V4（未改动）
-README.md                                       # 已更新
-Acid_Drip_Quick_Reference_Guide_GP8.pdf         # 新增
-LOCAL_MODIFICATIONS.md                          # 本文件
+arduino-cli compile --fqbn rp2040:rp2040:rpipico \
+  --build-property build.path=../build_out \
+  Firmware/Acid_Drip_Drum_Acid_Drift_V5
 ```
 
-## 7. 提交状态
+---
 
-- HEAD `3738a4a` 是原始上传版（MADCTL `0x80`、同步=GP2）。
-- 本清单涉及的所有改动均**未提交**（工作区含：V5 两个工程的 .ino 改动、README、
-  V5_Original_Sound 新目录、build 产物、本 PDF）。注意 git status 里 V4 工程与
-  若干 sample/kicad 文件的 "M" 多为**行尾（LF/CRLF）归一化**差异，非内容改动。
+## 9. 与上游的关系
+
+- 上游：`lonesoulsurfer/Acid_Drip_Bassline_and_Drum_Synth`（120 stars，最后推送 2026-09-13）
+- 本地 `main` 领先上游 5 个提交；`git merge origin/main` **实测零冲突**（git 正确识别
+  `src/` → `Firmware/` 重命名，无重复副本）。
+- ⚠️ 上游工作流是 **「Delete 目录 + Add files via upload」**（96 个提交全是作者一人），
+  任何针对 `src/` 内文件的 PR 都会在他下次整体上传时被覆盖。
+  → 对策见《与上游合并规划》：只提小而聚焦的 bug 修复 PR，不提目录改名。
+
+---
+
+## 10. 文件清单
+
+```
+Firmware/Acid_Drip_Drum_Acid_Drift_V5/     # 变体 A（原声 + 运行时 gSyncPin + 阶段 0 修复）
+Firmware/Acid_Drip_V5_AcidBox/             # 变体 B（AcidBox 303，待 rebase）
+Firmware/Acid_Drip_Drum_Acid_V4/           # 上游 V4（未改动）
+README.md                                   # 已更新
+Acid_Drip_Quick_Reference_Guide_GP8.pdf     # GP8 速查卡（**旧版，无四选项菜单**）
+LOCAL_MODIFICATIONS.md                       # 本文件
+说明书.md                                    # 中文用户手册（已更新）
+```
+
+> **编码说明**：两个 `.ino` 均为干净 UTF-8（实测 U+2014 分别 713 / 661 个，
+> U+9225 乱码 **0** 个）。此前"原版声音 .ino 含字面乱码 `鈥?`"的说法是
+> **PowerShell 控制台按非 UTF-8 解码造成的显示假象**，文件本身没问题。
+> 字面 U+9225 目前只存在于本文件里对它的引用。

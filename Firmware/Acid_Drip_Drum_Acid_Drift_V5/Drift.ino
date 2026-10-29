@@ -24,10 +24,21 @@
 // CORE OWNERSHIP — the one rule that matters here.
 // The echo and reverb state inside ch2RenderSample() is function-local
 // statics. They are safe only because exactly ONE core ever calls this
-// function in a session — true by construction again: this function is
-// called from exactly one call site (bmFillDrumBufferTo(), core 1), for
-// the entire session, every session. No handoff, no shared-state window,
+// function in a session. That holds by construction: the only call site is
+// bmFillDrumBufferTo() in BeatMachine2.ino, which runs on core 1, for the
+// entire session, every session. No handoff, no shared-state window,
 // nothing to synchronise.
+//
+// (2026-10) The main sketch used to have a SECOND call site — a "sync mode"
+// branch in updateAudio() that folded DRIFT + drums onto GP15, because in the
+// upstream design GP2 doubled as the sync clock pin and had no audio role
+// while synced. That branch was safe only while bmStartAudio() was skipped in
+// sync mode, which left bmAlarmStarted false and made core 1's
+// bmFillDrumBufferTo() early-return. Sync now lives on GP8, so GP2 is always
+// the audio pin and bmStartAudio() runs unconditionally — the second call
+// site has been deleted from the main sketch. Keep it that way: this
+// function must stay single-core.
+//
 // Note the indices are all masked (& (CH2_ECHO_LEN - 1) and friends), so
 // even if that ever changed again, the worst case would be a click from
 // stale/mixed state, not an out-of-range write.
@@ -136,8 +147,10 @@ int32_t __not_in_flash_func(ch2RenderSample)(){
       // Second synth voice — 8 selectable engines (ch2Sound), all built on
       // the same single phase-accumulator + decay-envelope skeleton so
       // adding an engine never costs more than a table lookup or two.
-      // Mutually exclusive with drums (both need GP2), so this branch
-      // replaces the drum mix entirely rather than adding to it.
+      // NOT mutually exclusive with drums: both live on GP2 and are summed
+      // additively by the caller (bmFillDrumBufferTo() adds this to the
+      // drum mix). The drum bus's drive/filter stages are deliberately NOT
+      // applied to DRIFT — see the caller's comment for why.
       if(ch2Env){
         int16_t s16 = 0;
         switch(ch2Sound){

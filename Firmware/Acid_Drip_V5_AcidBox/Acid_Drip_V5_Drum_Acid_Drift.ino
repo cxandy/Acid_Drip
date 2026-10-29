@@ -86,10 +86,14 @@
  *   power cycles until changed again.
  *
  * WIRING:
- *   TFT   : SCK=GP6, SDA=GP7, RST=3V3, DC=GP10, CS=GP13  (RST moved off GP8)
+ *   TFT   : SCK=GP6, SDA=GP7, RST=GP8, DC=GP10, CS=GP13
+ *           (on the modified board the LCD RST line is jumpered to 3V3,
+ *            which frees GP8 for the sync clock)
  *   Pots  : CUT=GP26, RES=GP28, DCY=GP27
- *   Sync  : IN/OUT=GP8  (same jack; hold pad 14 at power-on for the menu,
- *           pad 1 = SYNC IN, pad 2 = SYNC OUT — direction in firmware)
+ *   Sync  : GP8 by default, or GP2 on the original board — hold pad 14 at
+ *           power-on for the SYNC SETUP menu:
+ *             pad 1 = GP8 sync IN    pad 2 = GP8 sync OUT
+ *             pad 3 = GP2 sync IN    pad 4 = GP2 sync OUT
  *   Audio : GP15 acid (100R + 10nF RC filter); drums + DRIFT on GP2
  *
  *   Pads (top row, steps 1-8 / FUNC apply):
@@ -134,7 +138,6 @@ extern void   bmClearPadState();
 extern bool   bmPotLocked;
 extern uint8_t bmPotPickup;
 extern void     bmTriggerStep(uint8_t step);
-extern byte     bmStepDiv;
 extern byte     bmPulseNum;
 extern uint16_t bmStepNum;
 extern byte     bmDrumPos;
@@ -328,6 +331,35 @@ void recomputeMixGains() {
 // =====================================================================
 // PINS
 // =====================================================================
+// ── SYNC PIN — chosen at boot, not at compile time ──────────────────
+// One firmware serves both boards. The sync clock can run on:
+//
+//   GP8 (DEFAULT) — the MODIFIED board. The LCD's RST line is jumpered to
+//     3V3, so GP8 is free to carry the clock. GP2 therefore stays the
+//     drum/DRIFT audio pin in every mode, which is what lets the drums
+//     and DRIFT keep sounding while synced.
+//
+//   GP2 — the ORIGINAL upstream board. The LCD's RST line is still GP8 and
+//     the on-board SPDT switch shares GP2 between the drum/DRIFT audio and
+//     the sync clock. While sync is active GP2 becomes the clock line and
+//     the drum audio is switched off for that session (upstream behaviour).
+//
+// Pick one at power-on: hold pad 14 for the SYNC SETUP menu (see setup()).
+// With no key held, the machine boots in drum mode and the sync pin stays
+// at its default, GP8.
+#define SYNC_PIN_GP8   8
+#define SYNC_PIN_GP2   2
+
+// The display reset stays on GP8 for BOTH boards.
+//
+// Modified board: the LCD's RST line is jumpered to 3V3, so the driver's
+// init pulse on GP8 goes nowhere — harmless. GP8 is still the sync clock.
+//
+// Original board: the LCD's RST line really is GP8, and the driver must
+// pulse it to bring the panel up.
+//
+// Keeping the value at 8 is what lets ONE firmware serve both boards — the
+// SYNC PIN is chosen at boot instead of being baked in at compile time.
 #define TFT_CS    13
 #define TFT_RST    8
 #define TFT_DC    10
@@ -336,12 +368,6 @@ void recomputeMixGains() {
 #define POT_CUT   26
 #define POT_RES   28
 #define POT_DECAY 27
-// Sync input lives on GPIO8 (physical pin 11) — GP2 stays free for drum/DRIFT
-// audio, so sync-IN sessions keep the drums alive. GPIO8 was the TFT reset;
-// the LCD RST line is now jumpered to 3V3 (Adafruit begin() still pulses the
-// pin at init, before our sync init takes it over — harmless either way).
-#define SYNC_IN      8   // external sync clock input (DIN-sync, 24 PPQN)
-#define SYNC_OUT     8   // sync clock OUTPUT on the same GP8 jack (hardware PWM)
 
 // SYNC IN pulse detection — interrupt-driven, not polled. DIN-sync-style
 // clock pulses (24 PPQN, the TB-303/909 standard) are commonly only 1-2ms
@@ -363,6 +389,14 @@ const uint8_t PAD_PINS[16] = {
 #define PAD_PLAY_A  0   // pads 1+2 pressed together = PLAY/STOP
 #define PAD_PLAY_B  1
 #define PAD_FUNC_A  6   // pads 7+8 pressed together = FUNC toggle
+// Boot-time SYNC SETUP menu (hold pad 14 at power-on). The first two keep
+// the meaning they had in the original two-option menu, so the gesture is
+// unchanged for anyone used to it; the last two are the original-board
+// additions.
+#define PAD_SYNC_GP8_IN   0   // pad 1 — GP8 clock, sync IN
+#define PAD_SYNC_GP8_OUT  1   // pad 2 — GP8 clock, sync OUT
+#define PAD_SYNC_GP2_IN   2   // pad 3 — GP2 clock, sync IN
+#define PAD_SYNC_GP2_OUT  3   // pad 4 — GP2 clock, sync OUT
 #define PAD_FUNC_B  7
 
 // =====================================================================
@@ -1229,16 +1263,36 @@ uint8_t fxAssignFx    = 0;
 uint8_t rrMode    = 0;
 bool    rrPingFwd = true;
 
-bool     syncIn=false, syncOk=false;
+bool     syncOk=false;
+// Which GPIO carries the sync clock — chosen at boot from the SYNC SETUP
+// menu (pad 14 at power-on). SYNC_PIN_GP8 is the default and matches the
+// modified board, where the LCD's RST line is jumpered to 3V3 and GP8 is
+// free. SYNC_PIN_GP2 is the original upstream board, where the on-board
+// SPDT switch shares GP2 between the drum audio and the clock.
+//
+// This is a RUNTIME variable, not a macro: the pin mode, the interrupt and
+// every analogWrite() below are all set up in setup(), after the menu has
+// run, so one firmware covers both boards.
+//
+// gSyncPin == SYNC_PIN_GP2 also means the drum/DRIFT audio on GP2 is
+// switched off for the whole session while sync is active — the clock and
+// the drum audio genuinely cannot share one GPIO. (This variant does NOT
+// fold the drums onto GP15 the way the original-sound sketch does; see
+// LOCAL_MODIFICATIONS.md §5.2.)
+uint8_t  gSyncPin = SYNC_PIN_GP8;
 bool     syncMode=false;     // true = sync active this boot (either direction) —
-                              // pad 14 held at power-on. GP2 is repurposed away
-                              // from drum/DRIFT audio either way.
+                              // pad 14 held at power-on, then a SYNC SETUP
+                              // choice. The clock rides on gSyncPin; on the
+                              // modified board that is GP8 and GP2 stays the
+                              // drum/DRIFT audio pin in EVERY mode, so the
+                              // drums and DRIFT keep sounding while synced.
 bool     syncOutMode=false;  // direction, valid only when syncMode is true:
-                              // false = SYNC IN (GP2 listens for an external
-                              // clock, unchanged from V4/V5). true = SYNC OUT
-                              // (GP2 generates a DIN-sync-style clock from this
-                              // device's own tempo) — pads 14+13 held together
-                              // at power-on. See setup()'s BOOT MODE DETECT.
+                              // false = SYNC IN (the sync pin listens for an
+                              // external clock). true = SYNC OUT (the sync
+                              // pin generates a DIN-sync-style clock from
+                              // this device's own tempo). Direction is picked
+                              // at boot from the SYNC SETUP menu — see
+                              // setup()'s BOOT MODE DETECT.
 uint32_t syncOutPeriodUs = 0;   // current inter-pulse period being driven,
                                  // 0 = not yet set / not running — lets the
                                  // control-rate updater skip reprogramming the
@@ -4630,7 +4684,11 @@ void doModeSwitch() {
     // silent until started (pads 1+2, handled entirely in
     // BeatMachine2.ino's bmMode-gated block).
     bmAcidWasRunning = acidPlaying;  // keep legacy flag in sync
-    if (!syncMode && !bmAlarmStarted) bmStartAudio();  // no-op safety net; setup() already started it
+    // Safety net. Only skipped when the sync pin IS GP2 — there the clock
+    // and the drum audio share one GPIO, so GP2 must stay off the audio
+    // path for the whole session. On the modified board (sync pin = GP8)
+    // this runs unconditionally and the drums keep sounding while synced.
+    if (gSyncPin != SYNC_PIN_GP2 || !syncMode) bmStartAudio();
     bmFullDirty = true;
     bmStoredTempo = (float)seq.tempo;   // display tracks the shared clock
     bmPotLocked = true;
@@ -4715,7 +4773,7 @@ void syncOutUpdate() {
 
   if (!seq.running) {
     if (syncOutRunning) {
-      analogWrite(SYNC_OUT, 0);    // pulses off, line idle low
+      analogWrite(gSyncPin, 0);     // pulses off, line idle low
       syncOutRunning  = false;
       syncOutPeriodUs = 0;         // force a fresh reprogram on the next start
     }
@@ -4733,7 +4791,7 @@ void syncOutUpdate() {
     analogWriteFreq(1000000UL / periodUs);
     uint32_t duty = (uint32_t)(((uint64_t)SYNC_OUT_PULSE_US * SYNC_OUT_PWM_RANGE) / periodUs);
     if (duty >= SYNC_OUT_PWM_RANGE) duty = SYNC_OUT_PWM_RANGE - 1;  // never fully-on
-    analogWrite(SYNC_OUT, duty);
+    analogWrite(gSyncPin, duty);
   }
   syncOutRunning = true;
 }
@@ -6171,56 +6229,88 @@ void setup() {
   // depended on TFT being uninitialized, so this is a pure reorder.
 
   // ── BOOT MODE DETECT ────────────────────────────────────────────────
-  // Hold pad 14 (GP9) at power-on to bring up a SYNC MODE menu: press
-  // pad 1 for SYNC IN, pad 2 for SYNC OUT. Direction is a firmware-only
-  // choice, same jack, same physical SPDT switch position — hold pad 14
-  // to match the switch being in SYNC position (either direction), leave
-  // it alone for normal drum mode with the switch in DRUMS position.
-  // Sync now lives on GP8 (same jack) in both directions: GP2 is never taken from drums
-  // audio for the whole session — a GPIO can't be a PWM audio output and
-  // a clock line at the same time. In drum mode: GP2 is claimed by
-  // PWMAudio DMA for drum (and DRIFT) audio output.
+  // Hold pad 14 (GP9) at power-on to bring up the SYNC SETUP menu: it picks
+  // both the sync PIN and the direction. Everything here is a firmware-only
+  // choice — nothing is stored in EEPROM, so it is re-made every power cycle.
+  //
+  //   pad 1/2 — GP8 clock. The MODIFIED board: the LCD's RST line is
+  //     jumpered to 3V3, so GP8 is free for the clock and GP2 stays the
+  //     drum/DRIFT audio pin in every mode. The drums and DRIFT keep
+  //     sounding while synced — the whole point of the modification.
+  //
+  //   pad 3/4 — GP2 clock. The ORIGINAL upstream board, where the on-board
+  //     SPDT switch shares GP2 between the drum/DRIFT audio and the clock
+  //     (so the switch must be in the SYNC position). While sync is active
+  //     GP2 becomes the clock line and the drum/DRIFT output goes silent —
+  //     upstream behaviour.
+  //
+  // Leave the switch alone for normal drum mode; no key held = drum mode.
+  //
+  // In drum mode: GP2 is claimed by PWMAudio DMA for drum (and DRIFT)
+  // audio output, exactly as above.
   delay(50);  // allow pullup to settle
   bool bootP14Held = (digitalRead(PAD_PINS[13]) == LOW);
 
   if (bootP14Held) {
-    // SYNC MODE menu — block here until pad 1 (IN) or pad 2 (OUT) is
-    // pressed. Runs before Mozzi's audio is started and before the main
-    // loop, so a plain polling wait is safe; nothing else needs the CPU
-    // yet, and this is the same "block in setup() for a boot-time pad
-    // choice" idiom the old (now-removed) DRIFT routing menu used.
+    // SYNC SETUP menu — block here until one of pads 1-4 is pressed.
+    // Runs before Mozzi's audio is started and before the main loop, so a
+    // plain polling wait is safe; nothing else needs the CPU yet, and this
+    // is the same "block in setup() for a boot-time pad choice" idiom the
+    // old (now-removed) DRIFT routing menu used.
+    //
+    //   pad 1 = GP8, sync IN    modified board (LCD RST jumpered to 3V3)
+    //   pad 2 = GP8, sync OUT   modified board
+    //   pad 3 = GP2, sync IN    original board (SPDT switch in SYNC pos)
+    //   pad 4 = GP2, sync OUT   original board
+    //
+    // With GP2 as the clock, GP2 is shared with the drum audio, so the
+    // drum/DRIFT output is switched off for that session (upstream
+    // behaviour). With GP8 as the clock, GP2 stays the drum/DRIFT audio pin
+    // and the drums keep sounding in both directions.
     tft.fillScreen(C_BG);
     tft.setTextSize(2);
     tft.setTextColor(C_CYN);
-    tft.setCursor(52, 70);
-    tft.print("SYNC MODE");
+    tft.setCursor(42, 45);
+    tft.print("SYNC SETUP");
     tft.setTextSize(1);
     tft.setTextColor(C_WHT);
-    tft.setCursor(40, 110);
-    tft.print("PAD 1 = SYNC IN");
-    tft.setCursor(40, 130);
-    tft.print("PAD 2 = SYNC OUT");
+    tft.setCursor(20, 95);
+    tft.print("PAD 1 = GP8 SYNC IN");
+    tft.setCursor(20, 115);
+    tft.print("PAD 2 = GP8 SYNC OUT");
+    tft.setCursor(20, 145);
+    tft.print("PAD 3 = GP2 SYNC IN");
+    tft.setCursor(20, 165);
+    tft.print("PAD 4 = GP2 SYNC OUT");
 
     while (true) {
-      if (digitalRead(PAD_PINS[PAD_PLAY_A]) == LOW) { syncMode = true; syncOutMode = false; break; }
-      if (digitalRead(PAD_PINS[PAD_PLAY_B]) == LOW) { syncMode = true; syncOutMode = true;  break; }
+      if (digitalRead(PAD_PINS[PAD_SYNC_GP8_IN])  == LOW) { gSyncPin = SYNC_PIN_GP8; syncMode = true; syncOutMode = false; break; }
+      if (digitalRead(PAD_PINS[PAD_SYNC_GP8_OUT]) == LOW) { gSyncPin = SYNC_PIN_GP8; syncMode = true; syncOutMode = true;  break; }
+      if (digitalRead(PAD_PINS[PAD_SYNC_GP2_IN])  == LOW) { gSyncPin = SYNC_PIN_GP2; syncMode = true; syncOutMode = false; break; }
+      if (digitalRead(PAD_PINS[PAD_SYNC_GP2_OUT]) == LOW) { gSyncPin = SYNC_PIN_GP2; syncMode = true; syncOutMode = true;  break; }
       delay(10);
     }
     // Debounce: wait for whichever pad was pressed to release, so the same
     // press doesn't also register as a step-1/step-2 toggle once the main
     // pad scan starts up.
-    while (digitalRead(PAD_PINS[PAD_PLAY_A]) == LOW || digitalRead(PAD_PINS[PAD_PLAY_B]) == LOW) delay(10);
+    while (digitalRead(PAD_PINS[PAD_SYNC_GP8_IN])  == LOW ||
+           digitalRead(PAD_PINS[PAD_SYNC_GP8_OUT]) == LOW ||
+           digitalRead(PAD_PINS[PAD_SYNC_GP2_IN])  == LOW ||
+           digitalRead(PAD_PINS[PAD_SYNC_GP2_OUT]) == LOW) delay(10);
 
     // Confirm the choice before moving on
     tft.fillScreen(C_BG);
     tft.setTextSize(2);
     tft.setTextColor(C_CYN);
-    tft.setCursor(40, 100);
+    tft.setCursor(30, 100);
     tft.print(syncOutMode ? "SYNC OUT ACTIVE" : "SYNC IN ACTIVE");
     tft.setTextSize(1);
     tft.setTextColor(C_DGR);
-    tft.setCursor(60, 130);
-    tft.print(syncOutMode ? "clock output on GP8" : "external clock on GP8");
+    tft.setCursor(40, 130);
+    tft.print(syncOutMode ? "clock output on" : "external clock on");
+    tft.setCursor(40, 148);
+    tft.print(gSyncPin == SYNC_PIN_GP2 ? "GP2  (original PCB)"
+                                       : "GP8  (modified PCB)");
     delay(1200);
     tft.fillScreen(C_BG);
   } else {
@@ -6233,39 +6323,53 @@ void setup() {
   // layer-chord fire handler). ch2SynthMode always boots false, and DRIFT
   // lives on GP2 (see the DRIFT OUTPUT comment near ch2SynthMode's
   // declaration) — same output drums use, additively summed there.
-  // GP2/PWMAudio is started EAGERLY here (non-sync) rather than lazily on
-  // first entry to drum mode: DRIFT can now be reached first, via the
-  // layer chord, without ever touching drums, and needs GP2 live from the
-  // first sample just as much as drums do. doModeSwitch()'s own
-  // `if (!syncMode && !bmAlarmStarted) bmStartAudio();` stays as a
+  // GP2/PWMAudio is started EAGERLY rather than lazily on first entry to
+  // drum mode: DRIFT can now be reached first, via the layer chord, without
+  // ever touching drums, and needs GP2 live from the first sample just as
+  // much as drums do. doModeSwitch()'s own bmStartAudio() call stays as a
   // no-op safety net for whichever path the code takes.
-  // Audio start: drums/DRIFT audio ALWAYS runs now -- sync in/out both
-  // share the GP8 jack, so neither direction has to take GP2 away.
-  bmStartAudio();
+  //
+  // The one exception is the ORIGINAL-board layout (sync pin = GP2): there
+  // the clock and the drum audio genuinely share one GPIO, so GP2 has to be
+  // released to the clock for the whole session and the drum/DRIFT output
+  // goes silent. That is upstream behaviour, and the reason the modified
+  // board exists.
+  if (gSyncPin != SYNC_PIN_GP2 || !syncMode) bmStartAudio();
 
   if (syncMode && !syncOutMode) {
-    // SYNC IN: configure GP8 as digital input for external sync clock.
-    // INPUT_PULLDOWN assumes an active-high pulse source (idle low, pulses
-    // high) — the common case for DIN-sync/trigger clock outputs. If your
-    // sync source is open-drain or active-low instead, this needs to be
+    // SYNC IN: configure the sync pin as a digital input for the external
+    // clock. INPUT_PULLDOWN assumes an active-high pulse source (idle low,
+    // pulses high) — the common case for DIN-sync/trigger clock outputs. If
+    // your sync source is open-drain or active-low instead, this needs to be
     // INPUT_PULLUP with the interrupt mode changed to FALLING below.
-    pinMode(SYNC_IN, INPUT_PULLDOWN);
-    attachInterrupt(digitalPinToInterrupt(SYNC_IN), syncPulseISR, RISING);
-    // GP2 audio stays LIVE this session — the clock input moved to GP8, so
-    // there is no pin conflict any more: drums and DRIFT play exactly as on
-    // a normal boot, while the acid sequencer follows the external clock.
+    pinMode(gSyncPin, INPUT_PULLDOWN);
+    attachInterrupt(digitalPinToInterrupt(gSyncPin), syncPulseISR, RISING);
+    // On the MODIFIED board the sync pin is GP8, so GP2 audio stays LIVE
+    // this session — the clock input moved off the audio pin, so there is no
+    // conflict any more: drums and DRIFT play exactly as on a normal boot,
+    // while the acid sequencer follows the external clock.
+    //
+    // On the ORIGINAL board the sync pin is GP2, so bmStartAudio() was
+    // skipped above (bmAlarmStarted stays false) and core 1's
+    // bmFillDrumBufferTo() early-returns. The drum/DRIFT output is silent
+    // for that session.
   } else if (syncOutMode) {
-    // SYNC OUT: GP8 becomes a hardware-PWM-driven pulse output instead —
-    // free-running once programmed, near-zero CPU cost, no ISR jitter.
+    // SYNC OUT: the sync pin becomes a hardware-PWM-driven pulse output
+    // instead — free-running once programmed, near-zero CPU cost, no ISR
+    // jitter.
     // analogWriteFreq()/analogWriteRange() set the shape (frequency and
     // resolution); syncOutUpdate() (called every updateControl() tick)
     // reprograms the frequency and starts/stops the train to track tempo
     // and play state. Nothing is emitted until playback actually starts —
-    // see syncOutUpdate() below. Same GP2-is-exclusively-sync constraint
-    // as SYNC IN: drums and DRIFT are unavailable this session, and
-    // bmStartAudio() is likewise never called.
-    pinMode(SYNC_OUT, OUTPUT);
-    digitalWrite(SYNC_OUT, LOW);
+    // see syncOutUpdate() below.
+    //
+    // On the MODIFIED board the sync pin is GP8, so GP2 audio stays live and
+    // the drums and DRIFT keep sounding while this machine clocks other
+    // gear. On the ORIGINAL board the sync pin is GP2: bmStartAudio() was
+    // skipped above, so GP2 is free for the PWM clock train and the
+    // drum/DRIFT output is silent for that session.
+    pinMode(gSyncPin, OUTPUT);
+    digitalWrite(gSyncPin, LOW);
     analogWriteRange(SYNC_OUT_PWM_RANGE);
   }
 

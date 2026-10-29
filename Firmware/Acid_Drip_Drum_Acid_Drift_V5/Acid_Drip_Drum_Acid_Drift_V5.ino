@@ -76,20 +76,28 @@
  *   continue to work normally while active. Hold the same chord again
  *   to exit back to the normal pattern.
  *
- * ACCENT EDIT (pads 15+16, hold 1s):
- *   Toggles a mode where CUT/RES/DCY tune the accent envelope itself
- *   instead of the live filter:
- *     CUT = accent peak cutoff boost   RES = accent peak resonance boost
- *     DCY = accent decay-time (CCW=short/snappy, CW=long/dramatic)
- *   Normal CUT/RES/DCY values freeze while tuning. Hold the chord again
- *   to exit — settings save to EEPROM automatically and persist across
- *   power cycles until changed again.
+ * MIX EDIT (pads 15+16, hold 1s):
+ *   Toggles a mode where CUT/RES/DCY trim the output level of each of the
+ *   three engines independently:
+ *     CUT = Acid    RES = DRIFT    DCY = Drums
+ *   This is a digital trim sitting on top of the physical mix pot, which
+ *   only ever blends acid (GP15) against DRIFT+drums (GP2) as one combined
+ *   pair. Pot pickup applies: each pot stays inert until it has been moved
+ *   past its position at the moment MIX EDIT was entered. Hold the chord
+ *   again to exit — the three levels save to EEPROM automatically and
+ *   persist across power cycles until changed again.
  *
- * WIRING:
+ * WIRING (see LOCAL_MODIFICATIONS.md — the sync pin is chosen at boot):
  *   TFT   : SCK=GP6, SDA=GP7, RST=GP8, DC=GP10, CS=GP13
- *   Pots  : CUT=GP26, RES=GP27, DCY=GP28
- *   Sync  : IN=GP2 (hold pad 14 at power-on to boot into Sync In mode)
- *   Audio : GP15 (100R + 10nF RC filter to output jack)
+ *           (on the modified board the LCD RST line is jumpered to 3V3,
+ *            which frees GP8 for the sync clock)
+ *   Pots  : CUT=GP26, RES=GP28, DCY=GP27
+ *   Sync  : GP8 by default, or GP2 on the original board — hold pad 14 at
+ *           power-on for the SYNC SETUP menu:
+ *             pad 1 = GP8 sync IN    pad 2 = GP8 sync OUT
+ *             pad 3 = GP2 sync IN    pad 4 = GP2 sync OUT
+ *   Audio : GP15 acid (100R + 10nF RC filter to jack); GP2 drums + DRIFT
+ *           (470R to jack). The two meet at the PCB mix pot.
  *
  *   Pads (top row, steps 1-8 / FUNC apply):
  *     GP14=pad1  GP12=pad2  GP11=pad3  GP16=pad4
@@ -140,7 +148,18 @@
 //
 // Remove or set to 0 once the CHORD engine's core-placement and voice
 // budget are decided — this isn't meant to ship.
-#define BENCH_AUDIO_HEADROOM 1
+//
+// (2026-10) Default is now OFF. The instrumentation was still enabled (=1)
+// in the shipped build: that costs two time_us_32() reads per audio sample
+// on core 0, two more per drum-buffer sample on core 1, and a 1 Hz Serial
+// report — real overhead in a build that is otherwise audio-budget-tight.
+// Re-enable it for a one-off measurement build with:
+//   arduino-cli compile --build-property \
+//     "compiler.cpp.extra_flags=-DBENCH_AUDIO_HEADROOM=1" ...
+// or simply flip the #define below.
+#ifndef BENCH_AUDIO_HEADROOM
+#define BENCH_AUDIO_HEADROOM 0
+#endif
 
 #if BENCH_AUDIO_HEADROOM
 #include "pico/time.h"
@@ -205,14 +224,18 @@ extern void   bmClearPadState();
 extern bool   bmPotLocked;
 extern uint8_t bmPotPickup;
 extern void     bmTriggerStep(uint8_t step);
-extern byte     bmStepDiv;
 extern byte     bmPulseNum;
 extern uint16_t bmStepNum;
 extern byte     bmDrumPos;
 extern bool   bmPlaying;
 extern bool   bmPlayChanged;
 extern void   bmFillDrumBuffer();
-extern int32_t bmRenderDrumSample();  // one drum-bus sample (GP15 fold-in for sync mode)
+// One drum-bus sample. ONLY the original-board sync mode needs it on core 0
+// (see the fold branch in updateAudio()). Declared with __not_in_flash_func
+// to MATCH the definition in BeatMachine2.ino — a mismatched first
+// declaration would let GCC place the function in flash, and core 0's audio
+// hot path would then stall on an XIP fetch every sample.
+int32_t       __not_in_flash_func(bmRenderDrumSample)();
 extern void   bmFillDrumBufferMax();  // full pre-fill — ONLY for EEPROM.commit() (both cores
                                       // stall during flash erase, fills can't be threaded).
                                       // Never use before draws: see bmFillScreenFed()
@@ -449,6 +472,35 @@ void recomputeMixGains() {
 // =====================================================================
 // PINS
 // =====================================================================
+// ── SYNC PIN — chosen at boot, not at compile time ──────────────────
+// One firmware serves both boards. The sync clock can run on:
+//
+//   GP8 (DEFAULT) — the MODIFIED board. The LCD's RST line is jumpered to
+//     3V3, so GP8 is free to carry the clock. GP2 therefore stays the
+//     drum/DRIFT audio pin in every mode, which is what lets the drums
+//     and DRIFT keep sounding while synced.
+//
+//   GP2 — the ORIGINAL upstream board. The LCD's RST line is still GP8 and
+//     the on-board SPDT switch shares GP2 between the drum/DRIFT audio and
+//     the sync clock. While sync is active GP2 becomes the clock line, so
+//     the drums fall silent — upstream behaviour.
+//
+// Pick one at power-on: hold pad 14 for the SYNC SETUP menu (see setup()).
+// With no key held, the machine boots in drum mode and the sync pin stays
+// at its default, GP8.
+#define SYNC_PIN_GP8   8
+#define SYNC_PIN_GP2   2
+
+// The display reset stays on GP8 for BOTH boards.
+//
+// Modified board: the LCD's RST line is jumpered to 3V3, so the driver's
+// init pulse on GP8 goes nowhere — harmless. GP8 is still the sync clock.
+//
+// Original board: the LCD's RST line really is GP8, and the driver must
+// pulse it to bring the panel up.
+//
+// Keeping the value at 8 is what lets ONE firmware serve both boards — the
+// SYNC PIN is chosen at boot instead of being baked in at compile time.
 #define TFT_CS    13
 #define TFT_RST    8
 #define TFT_DC    10
@@ -457,7 +509,6 @@ void recomputeMixGains() {
 #define POT_CUT   26
 #define POT_RES   28
 #define POT_DECAY 27
-#define SYNC_IN    8
 
 // SYNC IN pulse detection — interrupt-driven, not polled. DIN-sync-style
 // clock pulses (24 PPQN, the TB-303/909 standard) are commonly only 1-2ms
@@ -482,6 +533,14 @@ const uint8_t PAD_PINS[16] = {
 #define PAD_PLAY_A  0   // pads 1+2 pressed together = PLAY/STOP
 #define PAD_PLAY_B  1
 #define PAD_FUNC_A  6   // pads 7+8 pressed together = FUNC toggle
+// Boot-time SYNC SETUP menu (hold pad 14 at power-on). The first two keep
+// the meaning they had in the original two-option menu, so the gesture is
+// unchanged for anyone used to it; the last two are the original-board
+// additions.
+#define PAD_SYNC_GP8_IN   0   // pad 1 — GP8 clock, sync IN
+#define PAD_SYNC_GP8_OUT  1   // pad 2 — GP8 clock, sync OUT
+#define PAD_SYNC_GP2_IN   2   // pad 3 — GP2 clock, sync IN
+#define PAD_SYNC_GP2_OUT  3   // pad 4 — GP2 clock, sync OUT
 #define PAD_FUNC_B  7
 
 // =====================================================================
@@ -1358,27 +1417,56 @@ uint8_t fxAssignFx    = 0;
 uint8_t rrMode    = 0;
 bool    rrPingFwd = true;
 
-bool     syncIn=false, syncOk=false;
+bool     syncOk=false;
+// Which GPIO carries the sync clock — chosen at boot from the SYNC SETUP
+// menu (pad 14 at power-on). SYNC_PIN_GP8 is the default and matches the
+// modified board, where the LCD's RST line is jumpered to 3V3 and GP8 is
+// free. SYNC_PIN_GP2 is the original upstream board, where the on-board
+// SPDT switch shares GP2 between the drum audio and the clock.
+//
+// This is a RUNTIME variable, not a macro: the pin mode, the interrupt and
+// every digitalWrite() below are all set up in setup(), after the menu has
+// run, so one firmware covers both boards.
+//
+// gSyncPin == SYNC_PIN_GP2 also means GP2 is NOT the drum/DRIFT audio pin
+// while sync is active — see the fold branch in updateAudio() and the
+// bmStartAudio() calls.
+uint8_t  gSyncPin = SYNC_PIN_GP8;
 bool     syncMode=false;     // true = sync active this boot (either direction) —
-                              // pad 14 held at power-on. GP2 is repurposed away
-                              // from drum/DRIFT audio either way.
+                              // pad 14 held at power-on, then a SYNC SETUP
+                              // choice. The clock rides on gSyncPin; on the
+                              // modified board that is GP8 and GP2 stays the
+                              // drum/DRIFT audio pin in EVERY mode, so the
+                              // drums and DRIFT keep sounding in both sync
+                              // directions.
 bool     syncOutMode=false;  // direction, valid only when syncMode is true:
-                              // false = SYNC IN (GP2 listens for an external
-                              // clock, unchanged from V4/V5). true = SYNC OUT
-                              // (GP2 generates a DIN-sync-style clock from this
-                              // device's own tempo) — pads 14+13 held together
-                              // at power-on. See setup()'s BOOT MODE DETECT.
+                              // false = SYNC IN (the sync pin listens for an
+                              // external clock). true = SYNC OUT (the sync
+                              // pin generates a DIN-sync-style clock from
+                              // this device's own tempo). Direction is picked
+                              // at boot from the SYNC SETUP menu — see
+                              // setup()'s BOOT MODE DETECT.
 // ── SYNC CLOCK MODEL: DIRECT ──────────────────────────────────────────
 // Matches the rest of the synth ecosystem (Freaq / Bass_Synth / Medusa):
 // SYNC OUT emits one clean digital gate per step (digitalWrite HIGH, pulled
 // LOW after a fixed width); SYNC IN advances the sequencer directly, one step
 // per incoming pulse — no tempo measurement, no PPQN-per-quarter math.
 //
-// The previous model was PWM/PPQN-based: it drove GP2 with analogWrite() as a
-// pulse *train* and derived tempo by measuring pulse intervals. At a low pulse
-// rate the audio-rate PWM carrier reads as a steady DC-ish voltage, not a gate
-// (the "constant output, not a pulse" symptom), and the tempo-derivation never
-// lined up with per-step-clocked gear. Both are replaced below.
+// The previous model was PWM/PPQN-based: it drove the sync pin with
+// analogWrite() as a pulse *train* and derived tempo by measuring pulse
+// intervals. At a low pulse rate the audio-rate PWM carrier reads as a
+// steady DC-ish voltage, not a gate (the "constant output, not a pulse"
+// symptom), and the tempo-derivation never lined up with per-step-clocked
+// gear. Both are replaced below.
+//
+// KNOWN LIMITATION — SYNC IN only assumes 1 PPQN. The tempo is derived by
+// measuring the interval between incoming pulses and dividing it by
+// SYNC_STEPS_PER_PULSE, i.e. it assumes the source sends ONE pulse per
+// quarter note. A standard 24 PPQN DIN-sync source (TR-808 / 909 / TB-303)
+// sends 24 pulses per quarter, so the sequencer would run 12x fast and the
+// BPM readout would sit at the 300 clamp. The fix is a PPQN divisor
+// (1 / 2 / 24) selected at boot — the AcidBox variant already carries one.
+// Until that lands, wire this build to a 1 PPQN source only.
 #define  SYNC_STEPS_PER_PULSE  4    // Sequencer 16th-note steps per sync pulse.
                                      // Your gear clocks 1 pulse per BEAT and acid
                                      // sequences 16ths (4 per beat), so 1 pulse =
@@ -1386,10 +1474,11 @@ bool     syncOutMode=false;  // direction, valid only when syncMode is true:
                                      // 4 evenly-timed steps at the measured tempo;
                                      // SYNC OUT emits 1 gate every 4 steps. Set 1
                                      // for a per-16th-step clock, 2 for per-8th.
-#define  SYNC_OUT_PULSE_MS     15   // SYNC OUT: gate width per step, in ms. GP2
-                                     // goes HIGH on each step and is pulled LOW
-                                     // this long after — a genuine digital gate
-                                     // (digitalWrite), same as every synth here.
+#define  SYNC_OUT_PULSE_MS     15   // SYNC OUT: gate width per step, in ms. The
+                                     // sync pin goes HIGH on each step and is
+                                     // pulled LOW this long after — a genuine
+                                     // digital gate (digitalWrite), same as
+                                     // every synth here.
 uint32_t syncOutPulseOffMs = 0;      // millis() at which to pull the sync-out gate
                                      // low; 0 = idle (line held low).
 uint8_t  syncOutStepCtr    = 0;      // steps since the last sync-out gate — emits
@@ -5001,7 +5090,11 @@ void doModeSwitch() {
     // silent until started (pads 1+2, handled entirely in
     // BeatMachine2.ino's bmMode-gated block).
     bmAcidWasRunning = acidPlaying;  // keep legacy flag in sync
-    bmStartAudio();  // no-op safety net; setup() already started it
+    // Safety net. Only skipped when the sync pin IS GP2 — there the clock
+    // and the drum audio share one GPIO, so GP2 must stay off the audio
+    // path for the whole session. On the modified board (sync pin = GP8)
+    // this runs unconditionally and the drums keep sounding while synced.
+    if (gSyncPin != SYNC_PIN_GP2 || !syncMode) bmStartAudio();
     bmFullDirty = true;
     bmStoredTempo = (float)seq.tempo;   // display tracks the shared clock
     bmPotLocked = true;
@@ -5074,17 +5167,19 @@ void doModeSwitch() {
 
 // SYNC OUT — DIRECT digital gate, one clean pulse per sequencer step, matching
 // the rest of the ecosystem (Freaq's outputSyncPulse()/updateSyncTrigger()).
-// syncOutPulse() is called right after advanceStep() drives GP2 HIGH; syncOutPoll()
-// (every updateControl tick) pulls it LOW once SYNC_OUT_PULSE_MS has elapsed.
+// syncOutPulse() is called right after advanceStep() drives the sync pin
+// HIGH; syncOutPoll() (every updateControl tick) pulls it LOW once
+// SYNC_OUT_PULSE_MS has elapsed.
 // This replaces the old analogWrite() PWM pulse-*train*, which smeared into a
-// steady voltage on GP2 at low pulse rates (the "constant, not a pulse" bug).
+// steady voltage on the sync pin at low pulse rates (the "constant, not a pulse"
+// bug).
 // Pulses simply stop when the transport stops (advanceStep no longer fires), and
 // syncOutPoll() drops any in-flight gate low — the line idles low, which is what
 // per-step-clocked gear expects. No-ops whenever syncOutMode is false.
 void syncOutPulse() {   // called once per step (right after advanceStep)
   if (!syncOutMode) return;
   if (syncOutStepCtr == 0) {            // emit on every SYNC_STEPS_PER_PULSE-th step
-    digitalWrite(SYNC_IN, HIGH);        // GP2 = the sync pin
+    digitalWrite(gSyncPin, HIGH);      // the sync pin (GP8 by default)
     syncOutPulseOffMs = millis() + SYNC_OUT_PULSE_MS;  // schedule the pull-low
     if (syncOutPulseOffMs == 0) syncOutPulseOffMs = 1; // 0 is the idle sentinel
   }
@@ -5094,7 +5189,7 @@ void syncOutPoll() {
   if (!syncOutMode) return;
   if (!seq.running) syncOutStepCtr = 0;  // re-arm so the next start pulses on step 0
   if (syncOutPulseOffMs && (int32_t)(millis() - syncOutPulseOffMs) >= 0) {
-    digitalWrite(SYNC_IN, LOW);
+    digitalWrite(gSyncPin, LOW);
     syncOutPulseOffMs = 0;
   }
 }
@@ -6508,46 +6603,51 @@ AudioOutput __not_in_flash_func(updateAudio)() {
     dev = d;
   }
 
-  // NORMAL MODE: acid only, on the exact proven 8-bit path (byte-identical
-  // to before DRIFT-in-sync existed). DRIFT plays on GP2, blended by the PCB
-  // mix pot; nothing to do here.
-  if (!syncMode) {
+  // GP15 carries the ACID voice in every mode. Whether DRIFT and drums also
+  // land here depends on which pin carries the sync clock:
+  //
+  //   gSyncPin == GP8 (modified board) — GP2 is always the drum/DRIFT audio
+  //     pin, so this function stays acid-only. Core 1 renders drums+DRIFT
+  //     into GP2 and nothing else does. Rendering them here as well would
+  //     (a) drive the same DRIFT echo/verb statics and the same drum
+  //     voice/filter/envelope state from two cores simultaneously, (b) put
+  //     a second copy of the drums on GP15 where the PCB mix pot cannot
+  //     remove them, and (c) apply the MIX EDIT trim twice.
+  //
+  //   gSyncPin == GP2 (original board) — the clock and the drum audio share
+  //     one GPIO, so while sync is active GP2 has no audio pin and the
+  //     drums and DRIFT would fall silent. Fold both onto GP15 with acid so
+  //     all three stay audible. SAFE cross-core: bmStartAudio() is skipped
+  //     in this mode, so bmAlarmStarted stays false, core 1's
+  //     bmFillDrumBufferTo() early-returns on !bmAlarmStarted, and this
+  //     function is the SOLE renderer of drums/DRIFT — their echo/verb
+  //     statics and envelope/filter state are never driven from two cores.
+  if (gSyncPin == SYNC_PIN_GP2 && syncMode) {
+    // Sum at 16-BIT: from16Bit(s<<8) == from8Bit(s), and from16Bit is
+    // centred at 0. DRIFT is ~int16 (±32600); drums come back already
+    // peak-limited and MIX-EDIT-trimmed from bmRenderDrumSample(); acid is
+    // dev<<8. Both engines run at AUDIO_RATE (16384Hz) so pitch/echo/decay
+    // match the GP2 path exactly. All rendered unconditionally so tails
+    // decay naturally after stop; new notes are gated upstream
+    // (driftPlaying / bmPlaying in advanceStep). The soft-clip just
+    // catches coincident peaks gracefully (same knee as the drum bus's
+    // bmSoftClip) rather than hard-wrapping.
+    int32_t drift = ch2RenderSample();
+    if (mixDriftGainQ8 != 256) drift = (drift * (int32_t)mixDriftGainQ8) >> 8;
+    int32_t drums = bmRenderDrumSample();
+    int32_t sum = (dev << 8) + drift + drums;              // 16-bit domain, centred 0
+    if      (sum >  24576) { sum =  24576 + ((sum - 24576) >> 2); if (sum >  32600) sum =  32600; }
+    else if (sum < -24576) { sum = -24576 + ((sum + 24576) >> 2); if (sum < -32600) sum = -32600; }
 #if BENCH_AUDIO_HEADROOM
     benchAudioExit(__benchT0);
 #endif
-    return MonoOutput::from8Bit((uint8_t)constrain(128 + dev, (int32_t)0, (int32_t)255));
+    return MonoOutput::from16Bit((int16_t)sum);
   }
 
-  // SYNC MODE: GP2 is the clock line, so DRIFT *and* drums have no output pin.
-  // Fold both onto GP15 with acid so all three are audible. SAFE cross-core: in
-  // sync mode bmStartAudio() is skipped, so bmFillDrumBufferTo() early-returns
-  // on !bmAlarmStarted and calls NEITHER ch2RenderSample() NOR
-  // bmRenderDrumSample() — core 0 (this function) is their sole caller here, so
-  // DRIFT's echo/verb statics and the drum voice/filter/envelope state can't be
-  // driven from two cores. Drum triggers also run on core 0 (advanceStep from
-  // updateControl), so trigger and render share a core in sync mode.
-  //
-  // Sum at 16-BIT (see the acid-path note above: from16Bit(s<<8)==from8Bit(s),
-  // from16Bit centred at 0). DRIFT is ~int16 (±32600); drums come back already
-  // peak-limited and MIX-EDIT-trimmed from bmRenderDrumSample(); acid is dev<<8.
-  // Both engines run at AUDIO_RATE (16384Hz) so pitch/echo/decay match the GP2
-  // path exactly. All rendered unconditionally (matching GP2) so tails decay
-  // naturally after stop; new notes are gated upstream (driftPlaying / bmPlaying
-  // in advanceStep). Normal mode blends these three in ANALOG across two pins
-  // via the PCB mix pot; sync collapses them onto one pin, so balance with MIX
-  // EDIT (per-engine trim already applied) — the soft-clip below just catches
-  // coincident peaks gracefully (same knee as the drum bus's bmSoftClip) rather
-  // than hard-wrapping.
-  int32_t drift = ch2RenderSample();
-  if (mixDriftGainQ8 != 256) drift = (drift * (int32_t)mixDriftGainQ8) >> 8;
-  int32_t drums = bmRenderDrumSample();
-  int32_t sum = (dev << 8) + drift + drums;                    // 16-bit domain, centred 0
-  if      (sum >  24576) { sum =  24576 + ((sum - 24576) >> 2); if (sum >  32600) sum =  32600; }
-  else if (sum < -24576) { sum = -24576 + ((sum + 24576) >> 2); if (sum < -32600) sum = -32600; }
 #if BENCH_AUDIO_HEADROOM
   benchAudioExit(__benchT0);
 #endif
-  return MonoOutput::from16Bit((int16_t)sum);
+  return MonoOutput::from8Bit((uint8_t)constrain(128 + dev, (int32_t)0, (int32_t)255));
 }
 
 // =====================================================================
@@ -6578,56 +6678,88 @@ void setup() {
   // depended on TFT being uninitialized, so this is a pure reorder.
 
   // ── BOOT MODE DETECT ────────────────────────────────────────────────
-  // Hold pad 14 (GP9) at power-on to bring up a SYNC MODE menu: press
-  // pad 1 for SYNC IN, pad 2 for SYNC OUT. Direction is a firmware-only
-  // choice, same jack, same physical SPDT switch position — hold pad 14
-  // to match the switch being in SYNC position (either direction), leave
-  // it alone for normal drum mode with the switch in DRUMS position.
-  // In sync mode (either direction): GP2 is taken away from drum/DRIFT
-  // audio for the whole session — a GPIO can't be a PWM audio output and
-  // a clock line at the same time. In drum mode: GP2 is claimed by
-  // PWMAudio DMA for drum (and DRIFT) audio output.
+  // Hold pad 14 (GP9) at power-on to bring up the SYNC SETUP menu: it picks
+  // both the sync PIN and the direction. Everything here is a firmware-only
+  // choice — nothing is stored in EEPROM, so it is re-made every power cycle.
+  //
+  //   pad 1/2 — GP8 clock. The MODIFIED board: the LCD's RST line is
+  //     jumpered to 3V3, so GP8 is free for the clock and GP2 stays the
+  //     drum/DRIFT audio pin in every mode. The drums and DRIFT keep
+  //     sounding while synced — the whole point of the modification.
+  //
+  //   pad 3/4 — GP2 clock. The ORIGINAL upstream board, where the on-board
+  //     SPDT switch shares GP2 between the drum/DRIFT audio and the clock
+  //     (so the switch must be in the SYNC position). While sync is active
+  //     GP2 becomes the clock line and the drums fall silent — upstream
+  //     behaviour.
+  //
+  // Leave the switch alone for normal drum mode; no key held = drum mode.
+  //
+  // In drum mode: GP2 is claimed by PWMAudio DMA for drum (and DRIFT)
+  // audio output, exactly as above.
   delay(50);  // allow pullup to settle
   bool bootP14Held = (digitalRead(PAD_PINS[13]) == LOW);
 
   if (bootP14Held) {
-    // SYNC MODE menu — block here until pad 1 (IN) or pad 2 (OUT) is
-    // pressed. Runs before Mozzi's audio is started and before the main
-    // loop, so a plain polling wait is safe; nothing else needs the CPU
-    // yet, and this is the same "block in setup() for a boot-time pad
-    // choice" idiom the old (now-removed) DRIFT routing menu used.
+    // SYNC SETUP menu — block here until one of pads 1-4 is pressed.
+    // Runs before Mozzi's audio is started and before the main loop, so a
+    // plain polling wait is safe; nothing else needs the CPU yet, and this
+    // is the same "block in setup() for a boot-time pad choice" idiom the
+    // old (now-removed) DRIFT routing menu used.
+    //
+    //   pad 1 = GP8, sync IN    modified board (LCD RST jumpered to 3V3)
+    //   pad 2 = GP8, sync OUT   modified board
+    //   pad 3 = GP2, sync IN    original board (SPDT switch in SYNC pos)
+    //   pad 4 = GP2, sync OUT   original board
+    //
+    // With GP2 as the clock, GP2 is shared with the drum audio, so the
+    // drums fall silent for that session (upstream behaviour). With GP8 as
+    // the clock, GP2 stays the drum/DRIFT audio pin and the drums keep
+    // sounding in both directions.
     tft.fillScreen(C_BG);
     tft.setTextSize(2);
     tft.setTextColor(C_CYN);
-    tft.setCursor(52, 70);
-    tft.print("SYNC MODE");
+    tft.setCursor(42, 45);
+    tft.print("SYNC SETUP");
     tft.setTextSize(1);
     tft.setTextColor(C_WHT);
-    tft.setCursor(40, 110);
-    tft.print("PAD 1 = SYNC IN");
-    tft.setCursor(40, 130);
-    tft.print("PAD 2 = SYNC OUT");
+    tft.setCursor(20, 95);
+    tft.print("PAD 1 = GP8 SYNC IN");
+    tft.setCursor(20, 115);
+    tft.print("PAD 2 = GP8 SYNC OUT");
+    tft.setCursor(20, 145);
+    tft.print("PAD 3 = GP2 SYNC IN");
+    tft.setCursor(20, 165);
+    tft.print("PAD 4 = GP2 SYNC OUT");
 
     while (true) {
-      if (digitalRead(PAD_PINS[PAD_PLAY_A]) == LOW) { syncMode = true; syncOutMode = false; break; }
-      if (digitalRead(PAD_PINS[PAD_PLAY_B]) == LOW) { syncMode = true; syncOutMode = true;  break; }
+      if (digitalRead(PAD_PINS[PAD_SYNC_GP8_IN])  == LOW) { gSyncPin = SYNC_PIN_GP8; syncMode = true; syncOutMode = false; break; }
+      if (digitalRead(PAD_PINS[PAD_SYNC_GP8_OUT]) == LOW) { gSyncPin = SYNC_PIN_GP8; syncMode = true; syncOutMode = true;  break; }
+      if (digitalRead(PAD_PINS[PAD_SYNC_GP2_IN])  == LOW) { gSyncPin = SYNC_PIN_GP2; syncMode = true; syncOutMode = false; break; }
+      if (digitalRead(PAD_PINS[PAD_SYNC_GP2_OUT]) == LOW) { gSyncPin = SYNC_PIN_GP2; syncMode = true; syncOutMode = true;  break; }
       delay(10);
     }
     // Debounce: wait for whichever pad was pressed to release, so the same
     // press doesn't also register as a step-1/step-2 toggle once the main
     // pad scan starts up.
-    while (digitalRead(PAD_PINS[PAD_PLAY_A]) == LOW || digitalRead(PAD_PINS[PAD_PLAY_B]) == LOW) delay(10);
+    while (digitalRead(PAD_PINS[PAD_SYNC_GP8_IN])  == LOW ||
+           digitalRead(PAD_PINS[PAD_SYNC_GP8_OUT]) == LOW ||
+           digitalRead(PAD_PINS[PAD_SYNC_GP2_IN])  == LOW ||
+           digitalRead(PAD_PINS[PAD_SYNC_GP2_OUT]) == LOW) delay(10);
 
     // Confirm the choice before moving on
     tft.fillScreen(C_BG);
     tft.setTextSize(2);
     tft.setTextColor(C_CYN);
-    tft.setCursor(40, 100);
+    tft.setCursor(30, 100);
     tft.print(syncOutMode ? "SYNC OUT ACTIVE" : "SYNC IN ACTIVE");
     tft.setTextSize(1);
     tft.setTextColor(C_DGR);
-    tft.setCursor(60, 130);
-    tft.print(syncOutMode ? "clock output on GP2" : "external clock on GP2");
+    tft.setCursor(40, 130);
+    tft.print(syncOutMode ? "clock output on" : "external clock on");
+    tft.setCursor(40, 148);
+    tft.print(gSyncPin == SYNC_PIN_GP2 ? "GP2  (original PCB)"
+                                       : "GP8  (modified PCB)");
     delay(1200);
     tft.fillScreen(C_BG);
   } else {
@@ -6640,38 +6772,47 @@ void setup() {
   // layer-chord fire handler). ch2SynthMode always boots false, and DRIFT
   // lives on GP2 (see the DRIFT OUTPUT comment near ch2SynthMode's
   // declaration) — same output drums use, additively summed there.
-  // GP2/PWMAudio is started EAGERLY here (non-sync) rather than lazily on
-  // first entry to drum mode: DRIFT can now be reached first, via the
-  // layer chord, without ever touching drums, and needs GP2 live from the
-  // first sample just as much as drums do. doModeSwitch()'s own
-  // `bmStartAudio();` stays as a
+  // GP2/PWMAudio is started EAGERLY here rather than lazily on first entry
+  // to drum mode: DRIFT can now be reached first, via the layer chord,
+  // GP2/PWMAudio is started EAGERLY rather than lazily on first entry to
+  // drum mode: DRIFT can now be reached first, via the layer chord, without
+  // ever touching drums, and needs GP2 live from the first sample just as
+  // much as drums do. doModeSwitch()'s own bmStartAudio() call stays as a
   // no-op safety net for whichever path the code takes.
-  bmStartAudio();
+  //
+  // The one exception is the ORIGINAL-board layout (sync pin = GP2): there
+  // the clock and the drum audio genuinely share one GPIO, so GP2 has to be
+  // released to the clock for the whole session and the drums fall silent.
+  // That is upstream behaviour, and the reason the modified board exists.
+  if (gSyncPin != SYNC_PIN_GP2 || !syncMode) bmStartAudio();
 
   if (syncMode && !syncOutMode) {
-    // SYNC IN: configure GP2 as digital input for external sync clock.
-    // INPUT_PULLDOWN assumes an active-high pulse source (idle low, pulses
-    // high) — the common case for DIN-sync/trigger clock outputs. If your
-    // sync source is open-drain or active-low instead, this needs to be
+    // SYNC IN: configure the sync pin as a digital input for the external
+    // clock. INPUT_PULLDOWN assumes an active-high pulse source (idle low,
+    // pulses high) — the common case for DIN-sync/trigger clock outputs. If
+    // your sync source is open-drain or active-low instead, this needs to be
     // INPUT_PULLUP with the interrupt mode changed to FALLING below.
-    pinMode(SYNC_IN, INPUT_PULLDOWN);
-    attachInterrupt(digitalPinToInterrupt(SYNC_IN), syncPulseISR, RISING);
-    // Do NOT call bmStartAudio() — GP2 stays as input for the whole
-    // session. This now makes BOTH drums AND DRIFT unavailable on this
-    // boot, not just drums — DRIFT lives on GP2 too, and a GPIO pin can't
-    // be a PWM audio output and a digital clock input at once. Acid alone
-    // is what sync mode gets; that's a hardware constraint, not a software
-    // choice.
+    pinMode(gSyncPin, INPUT_PULLDOWN);
+    attachInterrupt(digitalPinToInterrupt(gSyncPin), syncPulseISR, RISING);
+    // On the MODIFIED board the sync pin is GP8, so GP2 is untouched: it
+    // stays the drum/DRIFT audio pin and core 1 keeps rendering into it
+    // normally. The clock and the audio no longer contend for one GPIO,
+    // which is exactly why the drums stay audible while synced.
+    //
+    // On the ORIGINAL board the sync pin is GP2, so bmStartAudio() was
+    // skipped above (bmAlarmStarted stays false) and core 1's
+    // bmFillDrumBufferTo() early-returns. updateAudio() then folds the
+    // drums and DRIFT onto GP15 so they are still audible.
   } else if (syncOutMode) {
-    // SYNC OUT: GP2 is a plain digital output. The sequencer drives it HIGH
-    // once per step (syncOutPulse(), from the sequencer-advance block) and
-    // syncOutPoll() pulls it LOW after SYNC_OUT_PULSE_MS — a real digital gate,
-    // matching every other synth in the ecosystem. Nothing is emitted until the
-    // transport runs (no advanceStep = no gate; the line idles low). Same
-    // GP2-is-exclusively-sync constraint as SYNC IN: drums and DRIFT are
-    // unavailable this session, and bmStartAudio() is never called.
-    pinMode(SYNC_IN, OUTPUT);
-    digitalWrite(SYNC_IN, LOW);
+    // SYNC OUT: the sync pin is a plain digital output. The sequencer drives
+    // it HIGH once per step (syncOutPulse(), from the sequencer-advance
+    // block) and syncOutPoll() pulls it LOW after SYNC_OUT_PULSE_MS — a real
+    // digital gate, matching every other synth in the ecosystem. Nothing is
+    // emitted until the transport runs (no advanceStep = no gate; the line
+    // idles low). On the modified board GP2 is unaffected, so drums and
+    // DRIFT stay live and audible in sync-out mode.
+    pinMode(gSyncPin, OUTPUT);
+    digitalWrite(gSyncPin, LOW);
   }
 
   // ── ANIMATED SPLASH ─────────────────────────────────────────────────
@@ -6899,12 +7040,13 @@ void setup() {
   // available, with the pot doing real-time balance work no boot-time
   // choice ever could. Nothing to choose at power-on.
   //
-  // SYNC MODE's pad-1/pad-2 menu (see the BOOT MODE DETECT block, up near
+  // SYNC SETUP's pad-1..4 menu (see the BOOT MODE DETECT block, up near
   // the top of setup()) is a different situation from either of the above:
-  // GP2 really can only be one thing per boot — drum/DRIFT audio, a sync
-  // input, or a sync output — so unlike DRIFT routing, that one genuinely
-  // needs a choice, and its confirmation screen already ran up there,
-  // right after the choice was made, rather than down here.
+  // the sync jack carries only one direction per boot — a clock INPUT or a
+  // clock OUTPUT — and, on the original board, only one pin. So unlike DRIFT
+  // routing, that one genuinely needs a choice, and its confirmation screen
+  // already ran up there, right after the choice was made, rather than down
+  // here.
 
   memset(combBuf, 0, sizeof(combBuf));
   for (uint8_t i = 0; i < 8; i++) { vFreq[i]=287; vCnt[i]=0; }
