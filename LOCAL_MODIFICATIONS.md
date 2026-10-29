@@ -16,6 +16,7 @@
 | 编译验证 | ✅ **GitHub Actions 全部通过**（见 §8） |
 | 固件产物 | ✅ CI 产出的两个 UF2（见 §8.2） |
 | 与上游合并 | 零冲突已实测，但上游工作流会覆盖 PR（见 §9） |
+| B 版 303 音色对齐原版 AcidBox | ✅ 代码已改（见 §5 B.1），待烧录试听 |
 
 ---
 
@@ -232,6 +233,28 @@ B 的 `analogWrite(gSyncPin, duty)` + `analogWriteFreq()` 与 `PWMAudio bmPWM(2)
 - 相对当前上游**缺失** 6 块功能（见 §6.2），需 rebase 后才适合向上游贡献。
 - 主 sketch 6648 行。
 
+#### B.1 303 音色对齐原版 AcidBox（2026-10-29）
+
+对照 `github.com/copych/AcidBox` 的 `SynthVoice` / `AcidBanger` 运行参数，修掉移植里
+让 B 版"不像原版"的四处：
+
+| 项目 | 修改前 | 修改后（= 原版行为） |
+|---|---|---|
+| 包络模型 | 一次性指数衰减到 0，且**音高包络比滤波包络消失更快** | 衰减到 **sustain 0.2 后保持**，直到 gate 关闭（音符整步长）；rest 触发 1ms 释放（重音 50ms） |
+| 包络时间 | DCY 20ms..1.5s，滤波/音量同一条曲线 | 旋钮曲线同 AcidBox `knobMap`：滤波 15..5000ms、音量 15..7500ms，各覆盖 ~4.2 个时间常数 |
+| EnvMod | 硬编码 0.5 | **0.787**（AcidBanger 实际发 CC 100/127） |
+| Accent | 幅度 ×1.22、`AccentOn`=0.45、滤波包络放慢 1.5× | 幅度 ×1.024、`AccentOn`=0.08（CC 10/127）、**滤波包络快 5×**（原版 accent 是"啾"不是"拖"） |
+| RES 映射 | 旧 `gResonance`（反向、-512 偏移）直接当 0..1 用 | RES 电位器在本音色区间内的位置 0..1 → `SetResonance` 偏斜曲线；中点 ≈ 0.45 → 0.80（AcidBanger 的 64/127 ≈ 0.84） |
+| 输出级 | 原始信号 → 硬限幅 8-bit | `fast_shape(x*1.4)` 三次软饱和 → `128 ± 118`（保留鼓混音余量） |
+
+同时去掉了 `gCutoff` 上叠加的 `volSub4`（旧引擎用音量包络再压一遍截止频率，
+对 303 声部等于双重包络），slide/legato 音符不再重触发包络（与原版一致）。
+
+离线仿真（16384Hz，镜像 `computeAcid303Sample`）：常驻区 RMS ≈ −18 dBFS、峰值 ≈ 0.66，
+软饱和后峰值 0.93，0% 触顶；音量包络在 25/125/500ms 为 0.77/0.34/0.20（sustain 保持）。
+**未做**：原版主链的鼓侧链压缩器（ratio 12 / 50ms attack / 300ms release）——鼓和酸音
+在本机是两路独立输出（GP2/GP15 + 硬件混音电位器），加压缩器需要跨核传鼓包络，留作后续。
+
 ---
 
 ## 6. 已定位、尚未修复的问题
@@ -250,8 +273,8 @@ B 的 `analogWrite(gSyncPin, duty)` + `analogWriteFreq()` 与 `PWMAudio bmPWM(2)
 | 4 极级联 / 高精度 HP | `ACID_LPF_4POLE` / `ACID_LPF_HP` | 3 / 3 |
 | ISR 时间戳同步输入 | `gSyncPulseMicros` | 4 |
 
-变体 B 自身待修：`B:6012` 每采样调 `expf()`；`B:4947` RES 负半程在 303 音色上无效；
-`g303AmpLP` 仅在换音色时复位导致同音色连发 amp env 不从 0 重启。
+变体 B 自身待修：每采样一次 `expf()` 求 `baseCut`（可换表）；`g303AmpLP` 的
+去咔哒滤波时间常数（0.08 @16.384k ≈ 0.76ms）在极短重音上仍偏慢，可再调。
 
 ### 6.3 🟡 变体 B 的 GP2 模式没有 fold 分支
 见 §2.3。
