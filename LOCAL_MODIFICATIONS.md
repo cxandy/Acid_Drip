@@ -327,12 +327,12 @@ B 的 `analogWrite(gSyncPin, duty)` + `analogWriteFreq()` 与 `PWMAudio bmPWM(2)
   后者只改了链接步骤看到的路径，而核心归档仍写在 arduino-cli 自己的内部目录里，
   链接会报 `ld: cannot find <build.path>/core/core.a`。
 
-### 8.2 编译结果（run 40877867285，全绿）
+### 8.2 编译结果（run 40889134975 @ `acidbox-303-voice-align`，全绿）
 
 | 变体 | Flash | RAM | 产物 |
 |---|---|---|---|
 | A 原版声音 | 152772 B（7%）| 57468 B（21%）| `Acid_Drip_V5_Original_Sound.uf2` |
-| B AcidBox 303 | 153172 B（7%）| 70048 B（26%）| `Acid_Drip_V5_AcidBox_303.uf2` |
+| B AcidBox 303 | 153332 B（7%）| 70084 B（26%）| `Acid_Drip_V5_AcidBox_303.uf2` |
 
 除 Mozzi 库自身的 `#warning`（RP2040 平台未实现自动随机种子）外**无任何警告**。
 变体 B 的 sketch 文件夹名与主 .ino 名不一致，CI 里先复制成同名目录再编译。
