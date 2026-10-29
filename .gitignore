@@ -1,0 +1,16 @@
+# Build output — regenerate with arduino-cli, don't commit
+Firmware/build_out/
+Firmware/build_out_orig/
+build_out/
+build_out_orig/
+
+# Compiled firmware binaries
+*.uf2
+*.bin
+*.elf
+*.map
+
+# KiCad auto-backups / zips
+Acid_Drip_PCB*/**/*.zip
+*.kicad_sch-bak
+*.lck
