@@ -68,12 +68,17 @@ jobs:
 
       # ──  A ──────────────────────────────────────────────
       # Sketch  .ino 
+      #
+      #  --build-path --build-property build.path=...
+      # arduino-pico  arduino-cli 
+      #  --build-property 
+      # <build.path>/core/core.a ld: cannot find .../core/core.a
       - name: Compile variant A (original sound)
         run: |
           arduino-cli compile \
             --fqbn rp2040:rp2040:rpipico \
             --warnings default \
-            --build-property "build.path=${{ github.workspace }}/build/variant_a" \
+            --build-path "${{ github.workspace }}/build/variant_a" \
             Firmware/Acid_Drip_Drum_Acid_Drift_V5
 
       # ──  BAcidBox 303 ───────────────────────────────────────────
@@ -90,7 +95,7 @@ jobs:
           arduino-cli compile \
             --fqbn rp2040:rp2040:rpipico \
             --warnings default \
-            --build-property "build.path=${{ github.workspace }}/build/variant_b" \
+            --build-path "${{ github.workspace }}/build/variant_b" \
             build/sketches/Acid_Drip_V5_Drum_Acid_Drift
 
       - name: Collect UF2 binaries
