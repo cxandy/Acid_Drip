@@ -6,7 +6,7 @@
 > - Sync clock moved from GP2 to **GPIO8** (LCD RST jumpered to 3V3 to free it); GP2 is now drum/DRIFT audio only
 > - Drums and DRIFT stay audible in **both** sync directions (no longer muted by sync mode)
 > - `MADCTL 0x40` display-orientation fix
-> - Second firmware variant with the original (non-AcidBox) acid engine
+> - `Firmware/Acid_Drip_V5_AcidBox/` — second firmware variant with an AcidBox 303 engine port; `Firmware/Acid_Drip_Drum_Acid_Drift_V5/` keeps the original acid engine
 > - Chinese user manual (`说明书.md`) and `LOCAL_MODIFICATIONS.md`
 >
 > See `LOCAL_MODIFICATIONS.md` for the full change list.

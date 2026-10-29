@@ -25,15 +25,13 @@
 
 ## 2. 声音方案（二选一，各烧各的 UF2）
 
-### A. 原版声音 — `Firmware/Acid_Drip_V5_Original_Sound/`
-- = git HEAD 主 `.ino` + MADCTL `0x40` 显示修复（显示修复是早前改动、从未提交，HEAD 里是 `0x80`）+ 其余 11 个文件照抄。
-- 已编译：`Firmware/build_out_orig/Acid_Drip_V5_Original_Sound.ino.uf2`
-  （Flash 151916B / 7%，RAM 56000B / 21%）
+### A. 原版声音 — `Firmware/Acid_Drip_Drum_Acid_Drift_V5/`
+- = 上游最新代码（原版酸音引擎）+ 同步改动（GP8、无条件 `bmStartAudio()`）+ MADCTL `0x40` 显示修复。
+- 编译产物不进 git，用 arduino-cli 自行编译。
 
-### B. AcidBox 303 移植版 — `Firmware/Acid_Drip_V5_Drum_Acid_Drift/`
+### B. AcidBox 303 移植版 — `Firmware/Acid_Drip_V5_AcidBox/`
 - 主 `.ino` 内嵌 AcidBox 303 引擎移植（synthVoice / rosic TeeBee 滤波器 / overdrive / 波形表）。
-- 已编译：`Firmware/build_out/Acid_Drip_V5_Drum_Acid_Drift.ino.uf2`
-  （Flash 153004B，RAM 70048B）
+- 基于旧版代码分支，保留 24 PPQN 硬件 PWM 同步输出。
 
 **编码注意**：原版声音 `.ino` 注释里的破折号是字面乱码 `鈥?`（U+9225 + `?`），
 303 版是标准 `—`（U+2014）。编辑时须按各文件实际字节匹配，不可互相套用。
@@ -66,10 +64,9 @@
 ## 6. 文件清单（本会话产出）
 
 ```
-Firmware/Acid_Drip_V5_Original_Sound/          # 原版声音工程（12 个文件，同步=GP8）
-Firmware/Acid_Drip_V5_Drum_Acid_Drift/         # 303 AcidBox 版工程（同步=GP8）
-Firmware/build_out_orig/Acid_Drip_V5_Original_Sound.ino.uf2
-Firmware/build_out/Acid_Drip_V5_Drum_Acid_Drift.ino.uf2
+Firmware/Acid_Drip_Drum_Acid_Drift_V5/          # 原版声音（上游最新 + GP8 同步）
+Firmware/Acid_Drip_V5_AcidBox/                 # 303 AcidBox 版（旧分支，同步=GP8）
+Firmware/Acid_Drip_Drum_Acid_V4/               # 上游 V4（未改动）
 README.md                                       # 已更新
 Acid_Drip_Quick_Reference_Guide_GP8.pdf         # 新增
 LOCAL_MODIFICATIONS.md                          # 本文件
