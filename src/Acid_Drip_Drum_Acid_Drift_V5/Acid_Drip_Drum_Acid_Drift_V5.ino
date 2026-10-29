@@ -457,7 +457,7 @@ void recomputeMixGains() {
 #define POT_CUT   26
 #define POT_RES   27
 #define POT_DECAY 28
-#define SYNC_IN    2
+#define SYNC_IN    8
 
 // SYNC IN pulse detection — interrupt-driven, not polled. DIN-sync-style
 // clock pulses (24 PPQN, the TB-303/909 standard) are commonly only 1-2ms
@@ -5001,7 +5001,7 @@ void doModeSwitch() {
     // silent until started (pads 1+2, handled entirely in
     // BeatMachine2.ino's bmMode-gated block).
     bmAcidWasRunning = acidPlaying;  // keep legacy flag in sync
-    if (!syncMode && !bmAlarmStarted) bmStartAudio();  // no-op safety net; setup() already started it
+    bmStartAudio();  // no-op safety net; setup() already started it
     bmFullDirty = true;
     bmStoredTempo = (float)seq.tempo;   // display tracks the shared clock
     bmPotLocked = true;
@@ -6569,7 +6569,7 @@ void setup() {
   tft.begin(24000000);
   tft.setRotation(3);
 #ifdef PANEL_NEEDS_Y_MIRROR
-  tft.sendCommand(ILI9341_MADCTL, (uint8_t[]){0x80}, 1);
+  tft.sendCommand(ILI9341_MADCTL, (uint8_t[]){0x40}, 1);
 #endif
   tft.fillScreen(C_BG);
   // TFT init moved up here (was originally after the boot mode detect
@@ -6644,9 +6644,9 @@ void setup() {
   // first entry to drum mode: DRIFT can now be reached first, via the
   // layer chord, without ever touching drums, and needs GP2 live from the
   // first sample just as much as drums do. doModeSwitch()'s own
-  // `if (!syncMode && !bmAlarmStarted) bmStartAudio();` stays as a
+  // `bmStartAudio();` stays as a
   // no-op safety net for whichever path the code takes.
-  if (!syncMode) bmStartAudio();
+  bmStartAudio();
 
   if (syncMode && !syncOutMode) {
     // SYNC IN: configure GP2 as digital input for external sync clock.
