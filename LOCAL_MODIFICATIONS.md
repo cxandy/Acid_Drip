@@ -1,8 +1,8 @@
 # 本地改动清单 / Local Modifications
 
 > 记录 Acid Drip 固件在 git HEAD 基础上的所有改动 + 已定位的待修问题。
-> 更新日期：2026-10-29 ｜ 编译器：**未安装**（本轮无 arduino-cli / rp2040 core）｜ FQBN `rp2040:rp2040:rpipico` ｜ 采样率 16384Hz
-> 当前 HEAD：`f8f5f7c`（领先上游 `origin/main` = `f88e64d` 5 个提交），**本文件的全部改动尚未提交**
+> 更新日期：2026-10-29 ｜ 编译验证：✅ **GitHub Actions 全绿**（见 §8）｜ FQBN `rp2040:rp2040:rpipico` ｜ 采样率 16384Hz
+> 当前 HEAD：`7243650`（领先上游 `origin/main` = `f88e64d` 8 个提交）
 
 ---
 
@@ -10,11 +10,11 @@
 
 | 项目 | 状态 |
 |---|---|
-| 阶段 0 修复（跨核双渲染） | ✅ 代码已改，**静态验证通过，未编译** |
-| 硬件变体支持（GP8 / GP2 运行时切换） | ✅ 变体 A、B 均已实现 |
-| 文档一致性（README / 说明书） | ✅ 本轮已对齐代码 |
-| 编译验证 | ❌ **未做**——本机无 arduino-cli / rp2040 core |
-| 变体 A 的 UF2 | ❌ **仓库里两个 UF2 都不对应变体 A**（见 §8） |
+| 阶段 0 修复（跨核双渲染） | ✅ 代码已改，**CI 编译通过** |
+| 硬件变体支持（GP8 / GP2 运行时切换） | ✅ 变体 A、B 均已实现并编译通过 |
+| 文档一致性（README / 说明书） | ✅ 已对齐代码 |
+| 编译验证 | ✅ **GitHub Actions 全部通过**（见 §8） |
+| 固件产物 | ✅ CI 产出的两个 UF2（见 §8.2） |
 | 与上游合并 | 零冲突已实测，但上游工作流会覆盖 PR（见 §9） |
 
 ---
@@ -167,18 +167,19 @@ if (gSyncPin != SYNC_PIN_GP2 || !syncMode) bmStartAudio();
    README 原文的「one gate is sent per sequencer step」同样不准（实际是每 4 步 1 个）。
 2. **脉冲宽度**：原文写 2ms，代码里是 `SYNC_OUT_PULSE_MS = 15`（15ms）。
 
-### 3.3 静态验证结果
+### 3.3 验证结果
 
 | 检查 | 结果 |
 |---|---|
 | 大括号 / 圆括号 / 方括号平衡 | ✅ 变体 A 全部 12 个文件 0 差 |
 | 删除符号的残留引用 | ✅ `bmStepDiv` / `syncIn` / `SYNC_IN` / `SYNC_OUT` 全清零 |
 | 行尾完整性 | ✅ 所有 `.ino` / `.md` 保持原行尾（`.ino` 与 README/说明书 = CRLF 无 BOM；本文件 = LF）|
-| 编码 | ✅ 两个 `.ino` 为干净 UTF-8（U+2014 分别 713 / 661 个，U+9225 乱码 0 个）；本轮文档编辑后 U+9225 仍为 0 |
+| 编码 | ✅ 两个 `.ino` 为干净 UTF-8（U+2014 分别 728 / 674 个，U+9225 乱码 0 个）；本轮文档编辑后 U+9225 仍为 0 |
 | `digitalPinToInterrupt(pin)` 支持运行时变量 | ✅ arduino-pico 定义为 `(pin)`，已查 `cores/rp2040/Arduino.h` |
 | `analogWriteFreq()` 对运行时 pin 安全 | ✅ arduino-pico 的 `analogWriteFreq` 写**全局** `analogFreq`，不按 pin 绑定（已读 `cores/rp2040/wiring_analog.cpp`）|
 | `Adafruit_ILI9341` 支持 `_rst < 0` | ✅ 可退化为 `ILI9341_SWRESET` 软件复位（`Adafruit_ILI9341.cpp:194`）|
-| **编译** | ❌ **未做** |
+| **编译（变体 A）** | ✅ **通过**——GitHub Actions，见 §8 |
+| **编译（变体 B）** | ✅ **通过**——GitHub Actions，见 §8 |
 
 ---
 
@@ -278,24 +279,67 @@ B 的 `analogWrite(gSyncPin, duty)` + `analogWriteFreq()` 与 `PWMAudio bmPWM(2)
 
 ---
 
-## 8. 构建产物状态 ⚠️
+## 8. 构建产物与 CI
+
+### 8.1 GitHub Actions（当前唯一验证过的编译途径）
+
+本机没装 arduino-cli / rp2040 core，编译统一交给 GitHub Actions：
+`.github/workflows/build-firmware.yml`（push 到 main、任何 PR、手动触发都会跑）。
+
+它做四件事：
+
+1. 装 `arduino-cli` 1.1.1；
+2. 加 Philhower 的额外索引 URL，装核心 **`rp2040:rp2040`**；
+3. 装库：`Mozzi` 2.0.4（自动带 `FixMath`）、`Adafruit GFX Library`、`Adafruit ILI9341`；
+4. 编译两个变体，把 UF2 作为 artifact 上传（artifact 名 `acid-drip-firmware`）。
+
+**踩过并已修好的三个坑**：
+
+- RP2040 核心**不在 Arduino 默认索引里**，要用额外索引
+  `https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json`；
+  该索引里的包名是 **`rp2040`** 而不是 `arduino`，所以核心 id 是 `rp2040:rp2040`，
+  FQBN 是 `rp2040:rp2040:rpipico`（`arduino:rp2040` 会报 "Platform not found"）。
+- `arduino/setup-arduino-cli@v2` 的版本输入名是 **`version`**，不是 `arduino-cli-version`。
+- **必须用 `--build-path`，不能用 `--build-property build.path=...`**。
+  后者只改了链接步骤看到的路径，而核心归档仍写在 arduino-cli 自己的内部目录里，
+  链接会报 `ld: cannot find <build.path>/core/core.a`。
+
+### 8.2 编译结果（run 40877867285，全绿）
+
+| 变体 | Flash | RAM | 产物 |
+|---|---|---|---|
+| A 原版声音 | 152772 B（7%）| 57468 B（21%）| `Acid_Drip_V5_Original_Sound.uf2` |
+| B AcidBox 303 | 153172 B（7%）| 70048 B（26%）| `Acid_Drip_V5_AcidBox_303.uf2` |
+
+除 Mozzi 库自身的 `#warning`（RP2040 平台未实现自动随机种子）外**无任何警告**。
+变体 B 的 sketch 文件夹名与主 .ino 名不一致，CI 里先复制成同名目录再编译。
+
+### 8.3 仓库里的旧产物（已过时，别烧）
 
 | 产物 | 时间 | 实际对应 |
 |---|---|---|
-| `Firmware/build_out/Acid_Drip_V5_Drum_Acid_Drift.ino.uf2` | 2026-09-28 18:17:38 | **变体 B**（含 `g303*` 符号）|
-| `Firmware/build_out_orig/Acid_Drip_V5_Original_Sound.ino.uf2` | 2026-09-28 18:17:12 | **已删除的中间版本**（无 g303）|
+| `Firmware/build_out/Acid_Drip_V5_Drum_Acid_Drift.ino.uf2` | 2026-09-28 18:17:38 | **变体 B** |
+| `Firmware/build_out_orig/Acid_Drip_V5_Original_Sound.ino.uf2` | 2026-09-28 18:17:12 | **已删除的中间版本** |
 
-**变体 A 在这棵树里从未被编译过**——两个 map 都缺失变体 A 独有的全部符号
+变体 A 在这棵树里**从未被编译过**——两个 map 都缺失变体 A 独有的全部符号
 （`syncOutPulseOffMs`、`gResDiv`、`bench0_avgUs`、`bmRenderDrumSample`、
 `gEnvCutNorm`、`gSyncPulseMicros` 全部 0 命中）。
 
-→ 现成的两个 UF2 **都不能**代表「原声方案」的当前代码状态。
+→ **烧录请用 CI artifact**，仓库里这两个旧 UF2 都不能代表当前代码。
 
-**编译命令**（需先装 `arduino-cli` + `arduino:rp2040` core）：
+> `.gitignore` 把 `*.uf2` / `*.bin` / `*.elf` / `*.map` 全部排除，固件不进版本库。
+> 需要 UF2 时从 Actions artifact 下载（本地副本在 `Firmware/build_out/ci/`，该目录同样被忽略）。
+
+### 8.4 本地编译命令（需先装 `arduino-cli` + `rp2040:rp2040` core）
 
 ```
+arduino-cli core update-index \
+  --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+arduino-cli core install rp2040:rp2040
+arduino-cli lib install "Mozzi" "Adafruit GFX Library" "Adafruit ILI9341"
+
 arduino-cli compile --fqbn rp2040:rp2040:rpipico \
-  --build-property build.path=../build_out \
+  --build-path ../build_out \
   Firmware/Acid_Drip_Drum_Acid_Drift_V5
 ```
 
@@ -318,6 +362,8 @@ arduino-cli compile --fqbn rp2040:rp2040:rpipico \
 Firmware/Acid_Drip_Drum_Acid_Drift_V5/     # 变体 A（原声 + 运行时 gSyncPin + 阶段 0 修复）
 Firmware/Acid_Drip_V5_AcidBox/             # 变体 B（AcidBox 303，待 rebase）
 Firmware/Acid_Drip_Drum_Acid_V4/           # 上游 V4（未改动）
+.github/workflows/build-firmware.yml        # CI：编译两个变体并上传 UF2 artifact
+Firmware/build_out/ci/                     # 本地 CI 产物副本（gitignored，不入库）
 README.md                                   # 已更新
 Acid_Drip_Quick_Reference_Guide_GP8.pdf     # GP8 速查卡（**旧版，无四选项菜单**）
 LOCAL_MODIFICATIONS.md                       # 本文件

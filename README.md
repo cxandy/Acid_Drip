@@ -7,6 +7,7 @@
 > - On the modified board (sync on GPIO8) the drums and DRIFT stay audible in **both** sync directions, because GP2 remains drum/DRIFT audio only
 > - `MADCTL 0x40` display-orientation fix
 > - `Firmware/Acid_Drip_V5_AcidBox/` — second firmware variant with an AcidBox 303 engine port; `Firmware/Acid_Drip_Drum_Acid_Drift_V5/` keeps the original acid engine
+> - A GitHub Actions workflow (`.github/workflows/build-firmware.yml`) compiles both variants on every push; the UF2 binaries are downloadable from the run's artifacts
 > - Chinese user manual (`说明书.md`) and `LOCAL_MODIFICATIONS.md`
 >
 > See `LOCAL_MODIFICATIONS.md` for the full change list.
