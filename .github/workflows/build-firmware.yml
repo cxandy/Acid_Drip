@@ -68,12 +68,17 @@ jobs:
 
       # ── 变体 A：原版声音 ──────────────────────────────────────────────
       # Sketch 文件夹名与主 .ino 同名，可直接编译。
+      #
+      # 必须用 --build-path，不能用 --build-property build.path=...：
+      # arduino-pico 的核心归档是 arduino-cli 写进它自己的内部构建目录的，
+      # 用 --build-property 只改链接步骤看到的路径，链接就会去找
+      # <build.path>/core/core.a 而找不到（ld: cannot find .../core/core.a）。
       - name: Compile variant A (original sound)
         run: |
           arduino-cli compile \
             --fqbn rp2040:rp2040:rpipico \
             --warnings default \
-            --build-property "build.path=${{ github.workspace }}/build/variant_a" \
+            --build-path "${{ github.workspace }}/build/variant_a" \
             Firmware/Acid_Drip_Drum_Acid_Drift_V5
 
       # ── 变体 B：AcidBox 303 ───────────────────────────────────────────
@@ -90,7 +95,7 @@ jobs:
           arduino-cli compile \
             --fqbn rp2040:rp2040:rpipico \
             --warnings default \
-            --build-property "build.path=${{ github.workspace }}/build/variant_b" \
+            --build-path "${{ github.workspace }}/build/variant_b" \
             build/sketches/Acid_Drip_V5_Drum_Acid_Drift
 
       - name: Collect UF2 binaries
