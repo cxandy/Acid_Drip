@@ -3,6 +3,7 @@ Firmware/build_out/
 Firmware/build_out_orig/
 build_out/
 build_out_orig/
+build/
 
 # Compiled firmware binaries
 *.uf2
