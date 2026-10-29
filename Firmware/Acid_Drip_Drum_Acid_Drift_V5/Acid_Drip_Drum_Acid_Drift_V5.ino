@@ -455,8 +455,8 @@ void recomputeMixGains() {
 #define TFT_MOSI   7
 #define TFT_SCK    6
 #define POT_CUT   26
-#define POT_RES   27
-#define POT_DECAY 28
+#define POT_RES   28
+#define POT_DECAY 27
 #define SYNC_IN    8
 
 // SYNC IN pulse detection — interrupt-driven, not polled. DIN-sync-style
