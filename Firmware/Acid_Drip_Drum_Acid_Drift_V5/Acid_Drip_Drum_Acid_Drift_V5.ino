@@ -1389,6 +1389,14 @@ struct UI {
   uint32_t slotOverlayMs;     // millis() when overlay was triggered
   uint8_t  slotProgress;      // 0-100, fill % during hold-to-save
   bool     slotProgressShow;  // true = show progress bar (holding)
+  // FX ASSIGN incremental redraw (issue #8: the click when switching to FX /
+  // on every FX keypress). Each flag owns one region of drawFXAssign(), so a
+  // press repaints a few hundred pixels instead of the whole 320x240 panel.
+  bool     fxBannerDirty;     // blue "assigning: NAME" banner
+  uint8_t  fxBtnDirty;        // bitmask of the 8 FX buttons
+  bool     fxLabelDirty;      // "TAP ANY STEP TO ASSIGN:" line
+  uint16_t fxStepDirty;       // bitmask of the 16 step cells
+  bool     fxFooterDirty;     // two hint lines at the bottom
 };
 UI ui = {0,true,true,false,false,false,false,false,false,0,0,
          false,0,false,false,false,0,0,false};
@@ -3755,27 +3763,66 @@ void doFuncApply(uint8_t slot) {
   ui.infoDirty= true;
 }
 
+// Dirty-marking helpers for the FX ASSIGN screen (issue #8). They record
+// *what* changed instead of setting ui.fullDirty, so doDraw() can repaint
+// only that region on core 1 later (tft.* must never run on core 0).
+// FX_PAD_MAP maps pad -> effect id, so scan it rather than using an effect
+// id as a button index.
+void fxMarkButtonFor(uint8_t fx) {
+  for (uint8_t i = 0; i < 8; i++)
+    if (FX_PAD_MAP[i] == fx) ui.fxBtnDirty |= (uint8_t)(1 << i);
+}
+
+// Only steps that carry this effect change appearance when the selection
+// changes: the orange "matches the selected FX" fill is the only thing that
+// depends on fxAssignHasFx / fxAssignFx.
+void fxMarkStepsFor(uint8_t fx) {
+  for (uint8_t i = 0; i < NUM_STEPS; i++)
+    if (seq.steps[i].effect == fx) ui.fxStepDirty |= (uint16_t)1 << i;
+}
+
+// Banner, step-grid caption and both footer lines all print something
+// different depending on whether an FX is selected.
+void fxMarkHints() {
+  ui.fxBannerDirty = true;
+  ui.fxLabelDirty  = true;
+  ui.fxFooterDirty = true;
+}
+
 void doFXAssign(uint8_t padIdx) {
   if (!fxAssignHasFx) {
     if (padIdx < 8) {
-      fxAssignFx    = FX_PAD_MAP[padIdx];
+      uint8_t fx    = FX_PAD_MAP[padIdx];
+      fxAssignFx    = fx;
       fxAssignHasFx = true;
-      ui.dirty=true; ui.fullDirty=true;
+      // Select: banner/caption/footer text changes, this button turns
+      // yellow, and every step already carrying this FX turns orange.
+      fxMarkButtonFor(fx);
+      fxMarkStepsFor(fx);
+      fxMarkHints();
+      ui.dirty = true;
     }
     return;
   }
 
   // Tap the currently selected FX button again to deselect
   if (padIdx < 8 && FX_PAD_MAP[padIdx] == fxAssignFx) {
+    uint8_t fx    = fxAssignFx;
     fxAssignHasFx = false;
-    ui.dirty=true; ui.fullDirty=true;
+    // Deselect: same regions, mirrored (button back to grey, orange fills
+    // back to yellow/dark outlines).
+    fxMarkButtonFor(fx);
+    fxMarkStepsFor(fx);
+    fxMarkHints();
+    ui.dirty = true;
     return;
   }
 
-  // Assign or toggle FX on tapped step
+  // Assign or toggle FX on tapped step — exactly one cell changes.
   if (padIdx < NUM_STEPS) {
     seq.steps[padIdx].effect = (seq.steps[padIdx].effect == fxAssignFx) ? 0 : fxAssignFx;
-    ui.dirty=true; ui.fullDirty=true;
+    ui.fxStepDirty |= (uint16_t)1 << padIdx;
+    ui.dirty = true;
   }
 }
 
@@ -4910,6 +4957,7 @@ void drawChainMode() {
 // =====================================================================
 void drawFXInfo() {
   // Info strip only — called when infoDirty without full redraw
+  bmFillDrumBuffer();   // GP2 top-up: the strip is ~20 short prints over SPI
   const char* scShort[] = {"CHR","MAJ","MIN","PNT","BLU"};
   const int iY = 196;
   tft.fillRect(0, iY, SW, 14, C_BG);
@@ -4929,6 +4977,7 @@ void drawFXInfo() {
 
 void drawFXBars() {
   // Pot bars only — called when barDirty without full redraw
+  bmFillDrumBuffer();   // GP2 top-up: six bar fills over SPI
   const int bY=163, bP=9, bBarH=5;
   const int FX2=37, FW2=178, FH2=bBarH-2;
   int cw   = constrain((gCutoffDisplay * FW2) / 255, 0, FW2);
@@ -4942,16 +4991,19 @@ void drawFXBars() {
   if (dcyw < FW2) tft.fillRect(FX2+dcyw, bY+bP*2+1, FW2-dcyw, FH2, C_BG);
 }
 
-void drawFXAssign() {
-  if (fxAssignFresh) {
-    bmFillScreenFed(C_BG);   // banded full clear — wipes all remnants from previous screen
-    // Don't draw slot dots in FX mode — full screen is used for FX assignment UI
-    fxAssignFresh = false;
-  }
-
-  tft.setTextColor(C_WHT); tft.setTextSize(2);
-  tft.setCursor(4, 4); tft.print("FX ASSIGN");
-
+// ---------------------------------------------------------------------
+// FX ASSIGN — incremental region painters (issue #8)
+// ---------------------------------------------------------------------
+// The FX screen used to be repainted whole (320x240 = ~77 000 px of SPI) on
+// every keypress, because doFXAssign() set ui.fullDirty. That sustained
+// burst from core 1 starves core 0's XIP fetches (see the note at
+// updateAudio's __not_in_flash_func), so Mozzi misses sample deadlines, and
+// it also lets the GP2 ring buffer underrun — heard as the click. These
+// painters draw one region each and top up GP2 themselves, so a press costs
+// a few hundred pixels instead of a full screen. drawFXAssign() below still
+// uses all of them for the genuine full redraw (entering the mode).
+void drawFXAssignBanner() {
+  bmFillDrumBuffer();
   tft.fillRect(168, 0, SW-168, 22, C_BLU);
   tft.setTextColor(C_CYN); tft.setTextSize(1);
   tft.setCursor(170, 7);
@@ -4962,102 +5014,67 @@ void drawFXAssign() {
   } else {
     tft.print("pick an FX to assign");
   }
-  bmFillDrumBuffer();   // GP2 top-up: drawFXAssign is a long, otherwise-unfed
-                        // SPI burst — without these the ring buffer underruns
-                        // mid-redraw and clicks the speaker (the FX "bump").
+}
 
-  // 8 FX buttons in 2 rows of 4
+void drawFXAssignButton(uint8_t i) {
+  bmFillDrumBuffer();   // feed per button (mirrors drawStepCellEx's per-cell feed)
   const int eW=76, eH=32, eSp=2, eX=2, eY=26;
-  for (uint8_t i = 0; i < 8; i++) {
-    bmFillDrumBuffer();   // feed per button (mirrors drawStepCellEx's per-cell feed)
-    int bx = eX + (i%4) * (eW+eSp);
-    int by = eY + (i/4) * (eH+eSp);
-    uint8_t fx  = FX_PAD_MAP[i];
-    bool sel = (fxAssignHasFx && fxAssignFx == fx);
-    tft.drawRoundRect(bx-1, by-1, eW+2, eH+2, 4, C_BG);
-    tft.fillRoundRect(bx, by, eW, eH, 3, sel ? C_YEL : C_DGR);
-    if (sel) tft.drawRoundRect(bx-1, by-1, eW+2, eH+2, 4, C_ORG);
-    tft.setTextColor(sel ? C_BG : C_WHT); tft.setTextSize(1);
-    tft.setCursor(bx+3, by+4); tft.print(i+1);
-    char nm[12]; strncpy(nm, FXNAMES[fx], 11); nm[11]=0;
-    tft.setCursor(bx+3, by+16); tft.print(nm);
-  }
+  int bx = eX + (i%4) * (eW+eSp);
+  int by = eY + (i/4) * (eH+eSp);
+  uint8_t fx  = FX_PAD_MAP[i];
+  bool sel = (fxAssignHasFx && fxAssignFx == fx);
+  // The bg roundRect erases the old C_ORG selection ring that sits outside
+  // the fill; without it a deselected button keeps an orange outline.
+  tft.drawRoundRect(bx-1, by-1, eW+2, eH+2, 4, C_BG);
+  tft.fillRoundRect(bx, by, eW, eH, 3, sel ? C_YEL : C_DGR);
+  if (sel) tft.drawRoundRect(bx-1, by-1, eW+2, eH+2, 4, C_ORG);
+  tft.setTextColor(sel ? C_BG : C_WHT); tft.setTextSize(1);
+  tft.setCursor(bx+3, by+4); tft.print(i+1);
+  char nm[12]; strncpy(nm, FXNAMES[fx], 11); nm[11]=0;
+  tft.setCursor(bx+3, by+16); tft.print(nm);
+}
 
-  // Step grid
+void drawFXAssignLabel() {
   bmFillDrumBuffer();
   const int sY = 100;
-  tft.fillRect(0, sY, SW, 60, C_BG);   // clear step grid area only (not bar area below)
+  // Wipe the full caption width: the selected-state string is 41 chars
+  // (~246px at 6px/char), the unselected one is 20, so a plain overprint
+  // would leave the tail of the longer string behind.
+  tft.fillRect(0, sY, 300, 9, C_BG);
   tft.setTextSize(1);
   tft.setTextColor(fxAssignHasFx ? C_CYN : C_DGR);
   tft.setCursor(4, sY);
   tft.print(fxAssignHasFx ? "TAP ANY STEP TO ASSIGN:" : "STEP EFFECTS (select FX above to assign):");
+}
 
-  for (uint8_t i = 0; i < NUM_STEPS; i++) {
-    bmFillDrumBuffer();   // feed per step cell
-    int bx = 4  + (i%8) * 39;
-    int by = sY + 10 + (i/8) * 28;
-    uint8_t fx  = seq.steps[i].effect;
-    bool match  = (fxAssignHasFx && fx == fxAssignFx);
-    uint16_t fc = match ? C_ORG : (fx > 0 ? C_YEL : C_DGR);
-    if (match) tft.fillRoundRect(bx, by, 36, 24, 2, C_ORG);
-    else       tft.drawRoundRect(bx, by, 36, 24, 2, fc);
-    tft.setTextColor(match ? C_BG : fc); tft.setTextSize(1);
-    tft.setCursor(bx+3, by+4); tft.print(i+1);
-    if (fx > 0) {
-      char sh[5]; strncpy(sh, FXNAMES[fx], 4); sh[4]=0;
-      tft.setCursor(bx+3, by+14); tft.print(sh);
-    }
+void drawFXAssignStep(uint8_t i) {
+  bmFillDrumBuffer();   // feed per step cell
+  const int sY = 100;
+  int bx = 4  + (i%8) * 39;
+  int by = sY + 10 + (i/8) * 28;
+  // Erase the cell (plus its 1px ring) so a shorter/absent FX name does not
+  // leave text behind. 38x26 stays inside the 39/28 pitch.
+  tft.fillRect(bx-1, by-1, 38, 26, C_BG);
+  uint8_t fx  = seq.steps[i].effect;
+  bool match  = (fxAssignHasFx && fx == fxAssignFx);
+  uint16_t fc = match ? C_ORG : (fx > 0 ? C_YEL : C_DGR);
+  if (match) tft.fillRoundRect(bx, by, 36, 24, 2, C_ORG);
+  else       tft.drawRoundRect(bx, by, 36, 24, 2, fc);
+  tft.setTextColor(match ? C_BG : fc); tft.setTextSize(1);
+  tft.setCursor(bx+3, by+4); tft.print(i+1);
+  if (fx > 0) {
+    char sh[5]; strncpy(sh, FXNAMES[fx], 4); sh[4]=0;
+    tft.setCursor(bx+3, by+14); tft.print(sh);
   }
+}
 
-  // Pot bars — same geometry as main screen, shifted to y=163
-  {
-    bmFillDrumBuffer();
-    const int bY=163, bP=9, bBarH=5;
-    const int FX2=37, FW2=178, FH2=bBarH-2;
-    tft.setTextSize(1);
-    tft.setTextColor(C_WHT); tft.setCursor(4, bY);       tft.print("CUT");
-    tft.setTextColor(C_WHT); tft.setCursor(4, bY+bP);    tft.print("RES");
-    tft.setTextColor(C_WHT); tft.setCursor(4, bY+bP*2);  tft.print("DCY");
-    tft.drawRect(36, bY,       178, bBarH, C_DGR);
-    tft.drawRect(36, bY+bP,    178, bBarH, C_DGR);
-    tft.drawRect(36, bY+bP*2,  178, bBarH, C_DGR);
-    int cw   = constrain((gCutoffDisplay * FW2) / 255, 0, FW2);
-    int rw   = (constrain((int)gResonanceDisplay, 0, 1023) * FW2) / 1023;
-    int dcyw = dcyBarWidth(FW2);
-    if (cw > 0)   tft.fillRect(FX2, bY+1,      cw,   FH2, C_RED);
-    if (cw < FW2) tft.fillRect(FX2+cw, bY+1,   FW2-cw, FH2, C_BG);
-    if (rw > 0)   tft.fillRect(FX2, bY+bP+1,   rw,   FH2, C_YEL);
-    if (rw < FW2) tft.fillRect(FX2+rw, bY+bP+1, FW2-rw, FH2, C_BG);
-    if (dcyw > 0)   tft.fillRect(FX2, bY+bP*2+1, dcyw, FH2, C_MGR);
-    if (dcyw < FW2) tft.fillRect(FX2+dcyw, bY+bP*2+1, FW2-dcyw, FH2, C_BG);
-  }
-
-  // Info strip — BPM, key, sound, steps, play state
-  {
-    bmFillDrumBuffer();
-    const int iY = 196;
-    tft.fillRect(0, iY, SW, 14, C_BG);
-    tft.drawFastHLine(0, iY, SW, C_DGR);
-    tft.setTextSize(1);
-    tft.setTextColor(C_CYN);  tft.setCursor(4,   iY+4); tft.print("BPM:"); tft.print(seq.tempo);
-    tft.setTextColor(C_WHT);  tft.setCursor(52,  iY+4);
-    const char* scShort[] = {"CHR","MAJ","MIN","PNT","BLU"};
-    tft.print(NNAMES[seq.key]); tft.print(" "); tft.print(scShort[constrain((int)seq.scale,0,4)]);
-    tft.print(" O"); tft.print(seq.octave);
-    tft.setTextColor(C_MGR);  tft.setCursor(118, iY+4);
-    { int sslot=0; for(int s=0;s<8;s++) if(SOUND_MAP[s]==seq.sound){sslot=s;break;}
-      tft.print(VSTRIP_SND[sslot]); }
-    tft.setTextColor(C_GRN);  tft.setCursor(154, iY+4); tft.print(seq.len); tft.print("ST");
-    tft.setTextColor(acidPlaying ? C_GRN : C_YEL);
-    tft.setCursor(280, iY+4); tft.print(acidPlaying ? "[PLAY]" : "[STOP]");
-  }
-
+void drawFXAssignFooter() {
+  bmFillDrumBuffer();
   // Footer — two explicit lines (manual split, no reliance on GFX auto-wrap;
   // the old single-line strings were 65/55 chars, wider than the 320px panel
   // can hold at ~52 chars/line, so the wrapped remainder used to render
   // partially off the bottom of the screen)
   const int footY = 210, footH = SH - footY;   // reclaims the dead gap below the info strip
-  bmFillDrumBuffer();
   tft.fillRect(0, footY, SW, footH, C_DGR);
   tft.setTextColor(C_WHT); tft.setTextSize(1); tft.setTextWrap(false);
   tft.setCursor(4, footY+4);
@@ -5070,6 +5087,51 @@ void drawFXAssign() {
     : "hold pad1 = clear all   p7+p8 = exit");
 }
 
+void drawFXAssign() {
+  if (fxAssignFresh) {
+    bmFillScreenFed(C_BG);   // banded full clear — wipes all remnants from previous screen
+    // Don't draw slot dots in FX mode — full screen is used for FX assignment UI
+    fxAssignFresh = false;
+  }
+
+  tft.setTextColor(C_WHT); tft.setTextSize(2);
+  tft.setCursor(4, 4); tft.print("FX ASSIGN");
+
+  drawFXAssignBanner();
+
+  // 8 FX buttons in 2 rows of 4 — one painter per button, so a keypress can
+  // redraw just the one or two that actually changed.
+  for (uint8_t i = 0; i < 8; i++) drawFXAssignButton(i);
+
+  // Step grid
+  const int sY = 100;
+  tft.fillRect(0, sY, SW, 60, C_BG);   // clear step grid area only (not bar area below)
+  drawFXAssignLabel();
+  for (uint8_t i = 0; i < NUM_STEPS; i++) drawFXAssignStep(i);
+
+  // Pot bars — same geometry as main screen, shifted to y=163. Labels and
+  // frame are drawn here; the six bar fills come from drawFXBars(), which is
+  // also the standalone painter for the pot-moved path.
+  {
+    bmFillDrumBuffer();
+    const int bY=163, bP=9, bBarH=5;
+    tft.setTextSize(1);
+    tft.setTextColor(C_WHT); tft.setCursor(4, bY);       tft.print("CUT");
+    tft.setTextColor(C_WHT); tft.setCursor(4, bY+bP);    tft.print("RES");
+    tft.setTextColor(C_WHT); tft.setCursor(4, bY+bP*2);  tft.print("DCY");
+    tft.drawRect(36, bY,       178, bBarH, C_DGR);
+    tft.drawRect(36, bY+bP,    178, bBarH, C_DGR);
+    tft.drawRect(36, bY+bP*2,  178, bBarH, C_DGR);
+    drawFXBars();
+  }
+
+  // Info strip — BPM, key, sound, steps, play state (same painter the
+  // infoDirty path uses)
+  drawFXInfo();
+
+  drawFXAssignFooter();
+}
+
 // =====================================================================
 // DISPLAY — DISPATCH
 // =====================================================================
@@ -5079,7 +5141,30 @@ void drawFXAssign() {
 
 void doDraw() {
   if (fxAssignMode) {
-    if (ui.fullDirty) { ui.fullDirty=false; drawFXAssign(); return; }
+    if (ui.fullDirty) {
+      ui.fullDirty=false;
+      // A full redraw supersedes any pending partial region.
+      ui.fxBannerDirty=false; ui.fxLabelDirty=false; ui.fxFooterDirty=false;
+      ui.fxBtnDirty=0; ui.fxStepDirty=0;
+      drawFXAssign(); return;
+    }
+    // Incremental FX repaint (issue #8): consume at most ONE region group per
+    // pass so a keypress never turns into a full-screen SPI burst. A selection
+    // change becomes banner -> buttons -> caption -> steps -> footer across
+    // five loop1 passes (a few ms total), a step tap just one cell.
+    if (ui.fxBannerDirty) { ui.fxBannerDirty=false; drawFXAssignBanner(); return; }
+    if (ui.fxBtnDirty) {
+      uint8_t m = ui.fxBtnDirty; ui.fxBtnDirty = 0;
+      for (uint8_t i = 0; i < 8; i++) if (m & (1 << i)) drawFXAssignButton(i);
+      return;
+    }
+    if (ui.fxLabelDirty) { ui.fxLabelDirty=false; drawFXAssignLabel(); return; }
+    if (ui.fxStepDirty) {
+      uint16_t m = ui.fxStepDirty; ui.fxStepDirty = 0;
+      for (uint8_t i = 0; i < NUM_STEPS; i++) if (m & ((uint16_t)1 << i)) drawFXAssignStep(i);
+      return;
+    }
+    if (ui.fxFooterDirty) { ui.fxFooterDirty=false; drawFXAssignFooter(); return; }
     // Only redraw pot bars when pots move — not the whole screen
     if (ui.barDirty) { ui.barDirty=false; drawFXBars(); return; }
     if (ui.infoDirty) { ui.infoDirty=false; drawFXInfo(); return; }
@@ -6307,12 +6392,17 @@ void updateControl() {
       ui.valDirty = true;
     }
 
-    // FX mode: long-press pad 1 = clear all step effects
+    // FX mode: long-press pad 1 = clear all step effects.
+    // Incremental redraw (issue #8): clearing effects only changes the 16
+    // step cells and the selection-dependent hints — no full-screen burst.
     if (fxAssignMode && i==0 && pState[i] && !pLong[i] && (now-pDown[i])>LG) {
       pLong[i] = true;
       for (uint8_t s=0; s<NUM_STEPS; s++) seq.steps[s].effect = 0;
       fxAssignHasFx = false;
-      ui.dirty=true; ui.fullDirty=true;
+      ui.fxStepDirty = 0xFFFF;   // every cell drops its FX name
+      ui.fxBtnDirty  = 0xFF;     // the previously selected button un-highlights
+      fxMarkHints();
+      ui.dirty=true;
     }
 
     // Normal long-press → accent/glide cycle
@@ -7295,7 +7385,10 @@ void loop1() {
     drawSlotOverlay();
   }
   else if (ui.fullDirty || ui.editDirty || ui.funcDirty ||
-      ui.cellsDirty || ui.barDirty || ui.valDirty || ui.infoDirty) {
+      ui.cellsDirty || ui.barDirty || ui.valDirty || ui.infoDirty ||
+      // FX ASSIGN incremental regions (issue #8, see doDraw)
+      ui.fxBannerDirty || ui.fxBtnDirty || ui.fxLabelDirty ||
+      ui.fxStepDirty || ui.fxFooterDirty) {
     ui.dirty = false;
     doDraw();
   } else {
