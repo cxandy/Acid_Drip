@@ -2082,7 +2082,6 @@ void bmFillScreenFed(uint16_t color){
 void bmDrawInfoBody(){
   bmFillDrumBuffer();   // text-heavy strip
 
-  extern bool syncMode;
   // Single row: beat name (size 1) + flags on same line, freeing vertical space
   tft.fillRect(0,BM_IS_Y+14,SW,SH-BM_IS_Y-14,C_BG);
   const int ty=BM_IS_Y+20;
@@ -2099,8 +2098,9 @@ void bmDrawInfoBody(){
   tft.setTextSize(1);
   int fx=180;  // flags start x
   if(bmLastLoadedSlot>=0){tft.setTextColor(C_CYN);tft.setCursor(fx,ty+4);tft.print("S");tft.print(bmLastLoadedSlot+1);}
-  // Sync-in mode indicator — boot-time selection, GP2 is a clock input
-  if(syncMode){tft.setTextColor(C_CYN);tft.setCursor(290,ty+4);tft.print("SYNC");}
+  // Sync direction is shown by the unified top-right SYNC IN / SYNC OUT
+  // badge (drawSyncBadge(), called from the top strip). This row used to
+  // print a wordless "SYNC" here — removed so both screens agree.
 }
 
 void bmDrawInfoStrip(){
