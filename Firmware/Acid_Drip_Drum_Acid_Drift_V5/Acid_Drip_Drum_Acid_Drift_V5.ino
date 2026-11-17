@@ -1,4 +1,11 @@
 /*
+ * Acid Drip firmware - GPL-3.0
+ * Copyright (c) 2026 Marcus (lonesoulsurfer) - original Acid Drip firmware
+ * Modified 2026 by cxandy - runtime sync-pin selection, display orientation,
+ * filter sound profile. Source: https://github.com/cxandy/Acid_Drip
+ * See LICENSE and LOCAL_MODIFICATIONS.md in the repository root.
+ */
+/*
  * =====================================================================
  *              Acid Drip - RP2040 Acid Bassline Synthesizer
  *              Synthesis engine ported from reference "Badass Bass"
@@ -96,8 +103,9 @@
  *           power-on for the SYNC SETUP menu:
  *             pad 1 = GP8 sync IN    pad 2 = GP8 sync OUT
  *             pad 3 = GP2 sync IN    pad 4 = GP2 sync OUT
- *   Audio : GP15 acid (100R + 10nF RC filter to jack); GP2 drums + DRIFT
- *           (470R to jack). The two meet at the PCB mix pot.
+ *   Audio : GP15 acid -> R3 10K -> node; C7 10nF + R1 3.3K from the node
+ *           to GND, C6 10uF from the node to the jack. GP2 drums + DRIFT
+ *           -> SPDT -> mix pot -> the same node. One 3.5mm audio jack.
  *
  *   Pads (top row, steps 1-8 / FUNC apply):
  *     GP14=pad1  GP12=pad2  GP11=pad3  GP16=pad4

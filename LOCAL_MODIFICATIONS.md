@@ -295,8 +295,8 @@ B 的 `analogWrite(gSyncPin, duty)` + `analogWriteFreq()` 与 `PWMAudio bmPWM(2)
 
 ### 6.4 🟡 其他
 
-- 上游 issue #8「FX 切换爆音」未处理。
-- 上游**无 LICENSE 文件**（GitHub `license: null`），公开再分发前需确认授权。
+- 上游从 2026-11-14（commit `d265195`）起有许可证：固件 **GPL-3.0**、硬件 **CERN-OHL-S-2.0**。本仓库已带入 `LICENSE` / `LICENSE-HARDWARE` / `LICENSING.md`，源码保持公开。
+- 上游 issue #8「FX 切换爆音」：本地 `021c38b` 已改为增量重绘来消除 FX 模式按键爆音；实机复核后再去上游确认。
 - 仓库跟踪了 39 个 KiCad 备份 zip（`.gitignore` 后加，管不住已提交文件）。
 - `Acid_Drip_PCB- Kicad/Acid_Synth/Acid_Synth.zip`（222KB）已从 git 删除但仍留在磁盘上。
 - `Acid_Drip_Quick_Reference_Guide_GP8.pdf` 是只讲 GP8 的旧速查卡，**未包含四选项菜单**，本轮未重新生成（缺 PDF 生成工具链）。
@@ -308,11 +308,11 @@ B 的 `analogWrite(gSyncPin, duty)` + `analogWriteFreq()` 与 `PWMAudio bmPWM(2)
 
 | 信号 | 引脚 | 说明 |
 |---|---|---|
-| ACID 音频 | **GP15** | Mozzi `MOZZI_AUDIO_PIN_1 15`，100R + 10nF RC 后到 3.5mm |
-| 鼓 + DRIFT 音频 | **GP2** | `PWMAudio bmPWM(2)`；DRIFT 加性混入鼓缓冲，470R 后到 3.5mm |
+| ACID 音频 | **GP15** | Mozzi `MOZZI_AUDIO_PIN_1 15` → R3 10K → NODE；NODE 挂 C7 10nF + R1 3.3K 对地，再经 C6 10µF（原版 V5 为 100µF）到 3.5mm |
+| 鼓 + DRIFT 音频 | **GP2** | `PWMAudio bmPWM(2)`；DRIFT 加性混入鼓缓冲，经板上 SPDT（音频/同步）→ MIX Balance 10K 电位器 → 同一 NODE |
 | 同步 IN/OUT | **GP8 或 GP2** | **运行时选择**（见 §1.2）|
 | TFT RST | GP8（改装板已跳 3V3）| 两个变体的 `TFT_RST` 都保持 8 |
-| 混合 | 物理电位器 | PCB 上混合 GP15 vs GP2；电位器拧到 ACID 端会**短路 GP2** |
+| 混合 | 物理电位器 10K（第 4 只） | 抽头接 NODE，GP2 接一端，另一端经 4.7K 接地（原版该脚悬空）；ACID 端约 −17 dB，不断音 |
 
 ---
 
