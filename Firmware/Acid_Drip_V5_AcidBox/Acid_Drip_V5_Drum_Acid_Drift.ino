@@ -861,13 +861,13 @@ Sequencer seq = {
 // PATCH SAVE / LOAD  (EEPROM emulated in RP2040 flash)
 // =====================================================================
 #define NUM_SLOTS   4
-#define EEPROM_SIZE 1064  // was 1024 — bumped again to reserve 40 fresh bytes at
-                          // the tail (addresses 1024-1063) for the CUSTOM drum
-                          // pattern's own persisted slot. See BM_CUSTOM_ADDR in
-                          // BeatMachine2.ino — placed right at the old 1024
-                          // boundary since everything below 1024 is already
-                          // claimed (SLOT/ACCENT/CH2/CH2_SLOT/CH2_EUC/MIX). RP2040
-                          // EEPROM emulation reserves a full flash sector
+#define EEPROM_SIZE 1072  // 1064 -> 1072: 1024-1063 stays BM_CUSTOM's 40 bytes
+                          // (see BM_CUSTOM_ADDR in BeatMachine2.ino), and
+                          // 1064-1071 is the 8-byte SYNC config slot that
+                          // remembers the boot-menu sync direction.
+                          // (This variant has no FILTER block — that one lives
+                          // at 1064 in the Drum_Acid_Drift_V5 variant only.)
+                          // RP2040 EEPROM emulation reserves a full flash sector
                           // regardless of the size requested here, so this is free.
 #define PATCH_VALID 0xAC   // magic byte — slot has valid data
 // Whether acid was playing when this slot was saved, packed into the spare
@@ -1022,6 +1022,27 @@ struct MixSettings {
 };
 #define MIX_SETTINGS_SIZE ((int)sizeof(MixSettings))
 static_assert(MIX_ADDR + sizeof(MixSettings) <= EEPROM_SIZE, "MixSettings overruns EEPROM");
+
+// SYNC CONFIG — remembers the direction picked in the boot SYNC SETUP menu, so
+// a unit last used as clock master comes back up as master without anybody
+// holding pad 14. Only 1 meaningful byte. 0 = no stored choice (boot dark,
+// press pad 14 for the menu); 1 = IN; 2 = OUT. gSyncPin is NOT stored on
+// purpose: GP2 is the original-board layout, and a stored GP2-IN would silence
+// the drum/DRIFT output; the shipped AD-5 uses pads 1/2 (GP8). Pads 3/4 still
+// select GP2 for that session only and CLEAR the memory, so a later power
+// cycle cannot resurrect a GP2 sync mode by accident.
+#define SYNC_CFG_ADDR  1064
+#define SYNC_CFG_VALID 0x5C
+#define SYNC_DIR_NONE  0
+#define SYNC_DIR_IN    1
+#define SYNC_DIR_OUT   2
+struct SyncCfg {
+  uint8_t valid;
+  uint8_t dir;
+  uint8_t pad[6];   // padding — keeps the slot at 8 bytes for future flags
+};
+static_assert(sizeof(SyncCfg) == 8, "SyncCfg must stay 8 bytes");
+static_assert(SYNC_CFG_ADDR + sizeof(SyncCfg) <= EEPROM_SIZE, "SyncCfg overruns EEPROM");
 
 // =====================================================================
 // UI / MENU
@@ -3084,6 +3105,26 @@ void loadMixSettings() {
   recomputeMixGains();
 }
 
+// SYNC config save/load — see SyncCfg. Called from setup()'s boot detect,
+// after EEPROM.begin(); the write is committed by the main loop's saveCommit
+// path like every other settings block.
+void saveSyncCfg(uint8_t dir) {
+  SyncCfg c;
+  memset(&c, 0, sizeof(c));
+  c.valid = SYNC_CFG_VALID;
+  c.dir   = dir;
+  EEPROM.put(SYNC_CFG_ADDR, c);
+  saveCommit = true;
+}
+
+uint8_t loadSyncCfg() {
+  SyncCfg c;
+  EEPROM.get(SYNC_CFG_ADDR, c);
+  if (c.valid != SYNC_CFG_VALID) return SYNC_DIR_NONE;
+  if (c.dir != SYNC_DIR_IN && c.dir != SYNC_DIR_OUT) return SYNC_DIR_NONE;
+  return c.dir;
+}
+
 // =====================================================================
 // CHANNEL 2 SETTINGS SAVE / LOAD — separate EEPROM slot, same pattern as
 // accent settings above
@@ -4112,7 +4153,7 @@ void drawInfoStrip() {
   //  x=196 Walk mode    alloc 48px  → x=244
   //  x=244 Pat mode     alloc 36px  → x=280
   //  x=280 [PLAY/STOP]  alloc 36px  → x=316
-  //  x=316 S (sync)                 → x=322
+  // (sync state moved to the top-right badge — see drawSyncBadge)
 
   tft.setTextSize(1);
 
@@ -4151,15 +4192,8 @@ void drawInfoStrip() {
   tft.setCursor(280, ty);
   tft.print(acidPlaying ? "[PLAY]" : "[STOP]");
 
-  if (syncOk) {
-    // Only one character of width is allocated here (see the x=316/x=322
-    // layout comment above), so direction is shown by colour rather than
-    // by a second letter: cyan for SYNC IN (unchanged), magenta for SYNC
-    // OUT.
-    tft.setTextColor(syncOutMode ? C_MGN : C_CYN);
-    tft.setCursor(316, ty);
-    tft.print("S");
-  }
+  // SYNC state is NOT shown here any more — it lives in the top-right badge
+  // (drawSyncBadge) so every screen shows it in the same place.
 }
 
 // =====================================================================
@@ -4204,6 +4238,8 @@ void drawBarBorders() {
 // Slot occupancy dots — drawn inside the value strip, centred above pads 3-6.
 // Called once on full redraw and after any slot state change.
 // Empty = hollow grey, saved = filled yellow, lastLoaded = filled black outline cyan.
+void drawSyncBadge();   // defined below, painted by the two top-strip routines
+
 void drawSlotDots() {
   const int bW=36, bSp=3, sX=4;
   const int DOT_R = 4, DOT_Y = 5;
@@ -4237,6 +4273,22 @@ void drawSlotDots() {
       tft.setCursor(afterDotX, 3); tft.print("CH");
     }
   }
+
+  drawSyncBadge();
+}
+
+// SYNC badge — top-right corner of EVERY screen (acid top bar, drum top bar,
+// chain build). Cyan "SYNC IN" = following an external clock, magenta
+// "SYNC OUT" = acting as clock master, nothing = sync off. Drawn from
+// drawSlotDots()/bmDrawSlotDots(), i.e. the two routines that own the top
+// strip, so there is exactly one place that paints it.
+void drawSyncBadge() {
+  tft.fillRect(264, 0, SW - 264, 12, C_BG);
+  if (!syncMode || !syncOk) return;
+  tft.setTextSize(1);
+  tft.setTextColor(syncOutMode ? C_MGN : C_CYN);
+  tft.setCursor(266, 3);
+  tft.print(syncOutMode ? "SYNC OUT" : "SYNC IN");
 }
 
 // Save progress — only redraws the value strip when pct changes.
@@ -6336,27 +6388,38 @@ void setup() {
   // depended on TFT being uninitialized, so this is a pure reorder.
 
   // ── BOOT MODE DETECT ────────────────────────────────────────────────
-  // Hold pad 14 (GP9) at power-on to bring up the SYNC SETUP menu: it picks
-  // both the sync PIN and the direction. Everything here is a firmware-only
-  // choice — nothing is stored in EEPROM, so it is re-made every power cycle.
+  // The sync DIRECTION is remembered in EEPROM (SyncCfg, one byte at
+  // SYNC_CFG_ADDR): the last choice made here comes back on every power
+  // cycle, so a unit used as clock master stays master. Hold pad 14 (GP9)
+  // at power-on to re-open this menu and override it.
   //
-  //   pad 1/2 — GP8 clock. The MODIFIED board: the LCD's RST line is
-  //     jumpered to 3V3, so GP8 is free for the clock and GP2 stays the
-  //     drum/DRIFT audio pin in every mode. The drums and DRIFT keep
+  //   pad 1/2 — GP8 clock. The MODIFIED board (this product): the LCD's RST
+  //     line is jumpered to 3V3, so GP8 is free for the clock and GP2 stays
+  //     the drum/DRIFT audio pin in every mode. The drums and DRIFT keep
   //     sounding while synced — the whole point of the modification.
+  //     Saved to EEPROM.
   //
   //   pad 3/4 — GP2 clock. The ORIGINAL upstream board, where the on-board
   //     SPDT switch shares GP2 between the drum/DRIFT audio and the clock
   //     (so the switch must be in the SYNC position). While sync is active
   //     GP2 becomes the clock line and the drum/DRIFT output goes silent —
-  //     upstream behaviour.
+  //     upstream behaviour. NOT saved: this is a diagnostic/upstream mode,
+  //     and a stored GP2-IN would silently mute a shipped unit's drums;
+  //     picking 3/4 also CLEARS any stored direction.
   //
-  // Leave the switch alone for normal drum mode; no key held = drum mode.
+  // Leave the switch alone for normal drum mode; no pad held = the stored
+  // direction (or plain drum mode when nothing is stored).
   //
   // In drum mode: GP2 is claimed by PWMAudio DMA for drum (and DRIFT)
   // audio output, exactly as above.
   delay(50);  // allow pullup to settle
   bool bootP14Held = (digitalRead(PAD_PINS[13]) == LOW);
+
+  // EEPROM has to be live before the menu: the saved direction is read here
+  // and a new choice is written straight back. (Moved up from below — the
+  // rest of setup() is untouched by the move.)
+  EEPROM.begin(EEPROM_SIZE);
+  const uint8_t savedSyncDir = loadSyncCfg();
 
   if (bootP14Held) {
     // SYNC SETUP menu — block here until one of pads 1-4 is pressed.
@@ -6365,10 +6428,10 @@ void setup() {
     // is the same "block in setup() for a boot-time pad choice" idiom the
     // old (now-removed) DRIFT routing menu used.
     //
-    //   pad 1 = GP8, sync IN    modified board (LCD RST jumpered to 3V3)
-    //   pad 2 = GP8, sync OUT   modified board
-    //   pad 3 = GP2, sync IN    original board (SPDT switch in SYNC pos)
-    //   pad 4 = GP2, sync OUT   original board
+    //   pad 1 = GP8, sync IN    modified board (LCD RST jumpered to 3V3) — SAVED
+    //   pad 2 = GP8, sync OUT   modified board — SAVED
+    //   pad 3 = GP2, sync IN    original board (SPDT switch in SYNC pos) — this session only
+    //   pad 4 = GP2, sync OUT   original board — this session only
     //
     // With GP2 as the clock, GP2 is shared with the drum audio, so the
     // drum/DRIFT output is switched off for that session (upstream
@@ -6390,11 +6453,23 @@ void setup() {
     tft.setCursor(20, 165);
     tft.print("PAD 4 = GP2 SYNC OUT");
 
+    tft.setTextColor(C_DGR);
+    tft.setCursor(20, 195);
+    tft.print("PAD 1/2 ARE REMEMBERED AT POWER-ON");
+    tft.setCursor(20, 207);
+    tft.print("PAD 3/4: THIS BOOT ONLY");
+    tft.setCursor(20, 227);
+    tft.setTextColor(savedSyncDir == SYNC_DIR_NONE ? C_MGR : C_GRN);
+    tft.print("SAVED: ");
+    tft.print(savedSyncDir == SYNC_DIR_OUT ? "SYNC OUT"
+            : savedSyncDir == SYNC_DIR_IN  ? "SYNC IN"
+                                           : "NONE");
+
     while (true) {
-      if (digitalRead(PAD_PINS[PAD_SYNC_GP8_IN])  == LOW) { gSyncPin = SYNC_PIN_GP8; syncMode = true; syncOutMode = false; break; }
-      if (digitalRead(PAD_PINS[PAD_SYNC_GP8_OUT]) == LOW) { gSyncPin = SYNC_PIN_GP8; syncMode = true; syncOutMode = true;  break; }
-      if (digitalRead(PAD_PINS[PAD_SYNC_GP2_IN])  == LOW) { gSyncPin = SYNC_PIN_GP2; syncMode = true; syncOutMode = false; break; }
-      if (digitalRead(PAD_PINS[PAD_SYNC_GP2_OUT]) == LOW) { gSyncPin = SYNC_PIN_GP2; syncMode = true; syncOutMode = true;  break; }
+      if (digitalRead(PAD_PINS[PAD_SYNC_GP8_IN])  == LOW) { gSyncPin = SYNC_PIN_GP8; syncMode = true; syncOutMode = false; saveSyncCfg(SYNC_DIR_IN);  break; }
+      if (digitalRead(PAD_PINS[PAD_SYNC_GP8_OUT]) == LOW) { gSyncPin = SYNC_PIN_GP8; syncMode = true; syncOutMode = true;  saveSyncCfg(SYNC_DIR_OUT); break; }
+      if (digitalRead(PAD_PINS[PAD_SYNC_GP2_IN])  == LOW) { gSyncPin = SYNC_PIN_GP2; syncMode = true; syncOutMode = false; saveSyncCfg(SYNC_DIR_NONE); break; }
+      if (digitalRead(PAD_PINS[PAD_SYNC_GP2_OUT]) == LOW) { gSyncPin = SYNC_PIN_GP2; syncMode = true; syncOutMode = true;  saveSyncCfg(SYNC_DIR_NONE); break; }
       delay(10);
     }
     // Debounce: wait for whichever pad was pressed to release, so the same
@@ -6418,11 +6493,22 @@ void setup() {
     tft.setCursor(40, 148);
     tft.print(gSyncPin == SYNC_PIN_GP2 ? "GP2  (original PCB)"
                                        : "GP8  (modified PCB)");
+    tft.setCursor(40, 166);
+    tft.setTextColor(gSyncPin == SYNC_PIN_GP2 ? C_MGR : C_GRN);
+    tft.print(gSyncPin == SYNC_PIN_GP2 ? "this boot only - not stored"
+                                       : "remembered at next power-on");
     delay(1200);
     tft.fillScreen(C_BG);
   } else {
-    syncMode    = false;
-    syncOutMode = false;
+    // No pad 14: come up in whatever direction was last saved.
+    if (savedSyncDir == SYNC_DIR_IN || savedSyncDir == SYNC_DIR_OUT) {
+      gSyncPin    = SYNC_PIN_GP8;
+      syncMode    = true;
+      syncOutMode = (savedSyncDir == SYNC_DIR_OUT);
+    } else {
+      syncMode    = false;
+      syncOutMode = false;
+    }
   }
 
   // NOTE: the pad-11-at-boot selection of channel 2 is GONE. DRIFT is
@@ -6479,6 +6565,11 @@ void setup() {
     digitalWrite(gSyncPin, LOW);
     analogWriteRange(SYNC_OUT_PWM_RANGE);
   }
+
+  // Reflect the boot choice in the top-bar badge immediately — updateAudio()
+  // keeps syncOk in sync from here on, but the first drawMain() below happens
+  // before core 1's first audio callback.
+  syncOk = syncMode;
 
   // ── ANIMATED SPLASH ─────────────────────────────────────────────────
   {
@@ -6720,7 +6811,8 @@ void setup() {
   seq.lastUs   = micros();
   gSound       = seq.sound;
 
-  EEPROM.begin(EEPROM_SIZE);
+  // EEPROM.begin() now happens earlier, before the boot SYNC menu — see the
+  // BOOT MODE DETECT block.
   checkSlots();
   loadMixSettings();
   loadCh2Settings();

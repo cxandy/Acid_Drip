@@ -44,6 +44,7 @@ bool bmMode = false;
 // BM drum saves/loads are fully independent (BM EEPROM offset 256+).
 // Only these cross-module variables are needed from drum mode:
 extern volatile bool saveCommit;
+extern void drawSyncBadge();   // main tab: top-right SYNC IN/OUT badge
 // Combined save/load — defined in Acid_Drip_V5.ino. The save/load gesture
 // here in drum mode calls these instead of bmSavePatch()/bmLoadPatch()
 // directly, so a save from the drum screen also captures acid + DRIFT
@@ -367,14 +368,14 @@ bool bmBarsForce=false;   // force bmDrawBars to repaint everything (set on full
 // CUSTOM pattern (bmCustomBeat) auto-persists on its own, separate from the
 // 4 BmPatch slots above — one shared buffer, saved automatically whenever
 // you exit pattern-edit mode (long-hold pad 16), not tied to a save-slot
-// choice. Lives at the tail of EEPROM_SIZE (Acid_Drip_V5.ino), which was
-// bumped from 1024 to 1064 to make room — see the comment there. Placed at
-// the OLD boundary deliberately: everything below 1024 is already claimed
-// by other structs in that tab, so this is the only address guaranteed
-// free without auditing every other region's exact size.
+// choice. Lives at the tail of EEPROM_SIZE (Acid_Drip_V5.ino), which is now
+// 1072: 1024-1063 is this block, 1064-1071 is SYNC CFG. Placed at the OLD
+// 1024 boundary deliberately: everything below 1024 is already claimed by
+// other structs in that tab.
 #define BM_CUSTOM_ADDR 1024
 struct BmCustomPersist { uint8_t valid; byte custom[NUM_DRUMS][4]; };
 static_assert(sizeof(BmCustomPersist) <= 40, "BmCustomPersist grew past its reserved 40 bytes at BM_CUSTOM_ADDR — bump EEPROM_SIZE in Acid_Drip_V5.ino too");
+static_assert(BM_CUSTOM_ADDR + 40 <= 1064, "BM_CUSTOM_ADDR must stay clear of SYNC_CFG_ADDR (1064)");
 
 struct BmPatch {
   uint8_t valid;
@@ -1569,6 +1570,7 @@ void bmDrawSlotDots(){
     tft.setTextColor(C_DGR); tft.setTextSize(1);
     tft.setCursor(cx-2,BM_DOTS_Y+BM_DOTS_H-8); tft.print(s+1);
   }
+  drawSyncBadge();   // same top-right badge as the acid screen
 }
 
 void bmDrawGrid(){
