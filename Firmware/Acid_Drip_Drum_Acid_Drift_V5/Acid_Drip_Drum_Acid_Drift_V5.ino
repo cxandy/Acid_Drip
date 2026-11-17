@@ -258,6 +258,7 @@ extern void   bmFillScreenFed(uint16_t color);  // banded full-screen clear — 
 extern void   bmDrawDrumFlash();
 extern uint32_t bmLastFlashDraw;
 extern float    bmStoredTempo;
+extern bool     bmVsDirty;
 extern bool     bmPChord[16];
 extern bool     bmPState[16];
 extern bool     bmP11Deferred;
@@ -536,12 +537,11 @@ void recomputeMixGains() {
 #define POT_RES   28
 #define POT_DECAY 27
 
-// SYNC IN pulse detection — interrupt-driven, not polled. DIN-sync-style
-// clock pulses (24 PPQN, the TB-303/909 standard) are commonly only 1-2ms
-// wide; polling at MOZZI_CONTROL_RATE (~3.9ms/cycle, see below) risks
-// missing narrow pulses entirely, especially at higher tempos. An ISR
-// catches every rising edge regardless of width or CPU timing; the
-// control-rate code just checks and clears this flag once per cycle.
+// SYNC IN pulse detection — interrupt-driven, not polled. Polling at
+// MOZZI_CONTROL_RATE (~3.9ms/cycle, see below) would quantize the measured
+// interval to that period and show up as a ±1 BPM flicker on the readout.
+// The ISR stamps micros() on every rising edge; the control-rate code
+// compares two stamps, so the measurement is not quantized.
 volatile bool     gSyncPulseFlag  = false;
 volatile uint32_t gSyncPulseMicros = 0;   // micros() at the last rising edge —
                                           // stamped in the ISR so tempo isn't
@@ -629,7 +629,11 @@ const uint8_t PAD_PINS[16] = {
                         // and is near-complementary to amber — it pops
                         // hardest on exactly the cells that matter.
 
-Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
+// RST = -1: the library only sends SWRESET and never drives a pin. setup()
+// pulses TFT_RST by hand ONLY on hardware where GP8 is the panel reset (the
+// upstream original board) — on the AZSMZ board GP8 is the SYNC JACK and must
+// never be toggled at boot.
+Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, -1);
 
 // =====================================================================
 // NOTE FREQUENCY TABLE
@@ -1561,9 +1565,9 @@ bool     syncOutMode=false;  // direction, valid only when syncMode is true:
 // SYNC_STEPS_PER_PULSE, i.e. it assumes the source sends ONE pulse per
 // quarter note. A standard 24 PPQN DIN-sync source (TR-808 / 909 / TB-303)
 // sends 24 pulses per quarter, so the sequencer would run 12x fast and the
-// BPM readout would sit at the 300 clamp. The fix is a PPQN divisor
-// (1 / 2 / 24) selected at boot — the AcidBox variant already carries one.
-// Until that lands, wire this build to a 1 PPQN source only.
+// BPM readout would sit at the 300 clamp. The fix would be a PPQN divisor
+// (1 / 2 / 24) selected at boot. Until that lands, wire this build to a
+// 1 PPQN source only — both firmware variants behave the same way.
 #define  SYNC_STEPS_PER_PULSE  4    // Sequencer 16th-note steps per sync pulse.
                                      // Your gear clocks 1 pulse per BEAT and acid
                                      // sequences 16ths (4 per beat), so 1 pulse =
@@ -2275,14 +2279,6 @@ volatile uint32_t ch2NoisePhase = 0;     // NOIZ: clock accumulator — sets noi
 volatile uint32_t ch2VowP1      = 0;     // VOWEL: formant-1 phase (absolute Hz, not a ratio)
 volatile uint32_t ch2VowP2      = 0;     // VOWEL: formant-2 phase
 volatile uint32_t ch2GatePhase  = 0;     // GATE: chop phase, free-running and pitch-independent
-uint32_t syncMs=0;
-#define  SYNCTOUT 2000
-
-// Legacy sync state from the old PPQN tempo-derivation model — no longer used
-// by the direct-clock engine (see SYNC_STEPS_PER_PULSE). syncPulse is retained
-// only because a few reset sites still write it (harmless); nothing reads it.
-uint8_t  syncPulse   = 0;
-
 // =====================================================================
 // HELPERS
 // =====================================================================
@@ -3387,7 +3383,6 @@ void loadAllFromSlot(uint8_t slot) {
     seq.running = true;
     seq.cur = seq.len - 1;
     seq.lastUs = micros();
-    syncPulse = 0;
     if (chainActive) chainTickCount = 0;
   } else if (!clockWanted) {
     seq.running = false;
@@ -5416,7 +5411,6 @@ void updateControl() {
         seq.running = true;
         seq.cur = seq.len - 1;
         seq.lastUs = micros();
-        syncPulse = 0;
         bmStepNum = 0; bmPulseNum = 0;
         if (chainActive) chainTickCount = 0;  // resync chain to the restarted loop
       }
@@ -5483,7 +5477,6 @@ void updateControl() {
             if (!seq.running) {
               seq.running = true;
               seq.lastUs = micros();
-              syncPulse = 0;
             }
           }
         }
@@ -5700,6 +5693,53 @@ void updateControl() {
     if (changed) ui.barDirty = true;
     // NB: no return — fall through so the pad scan can catch the exit chord.
   }
+
+  // ── SYNC (must stay ABOVE the bmMode return below) ──────────────────
+  // When this block sat after it, the entire sync path was dead on the drum
+  // screen: SYNC OUT raised the gate on the first step and nothing ever
+  // pulled it low again (one edge, then a stuck-high line), and SYNC IN
+  // never read the ISR flag, so a slave parked on the drum screen ignored
+  // the clock until you switched back to the acid screen.
+  syncOk = syncMode;  // sync active only when boot-selected
+
+  // SYNC IN — TEMPO SUBDIVISION. Your clock pulses once per beat, but acid
+  // sequences 16ths (SYNC_STEPS_PER_PULSE steps per pulse), so a pulse can't just
+  // advance one step (too slow, 4x) and can't burst 4 at once (rhythmically
+  // wrong). Instead, measure the interval between pulses and set seq.interval to
+  // interval / SYNC_STEPS_PER_PULSE — the internal clock above then plays exactly
+  // that many evenly-spaced steps across each pulse, at the source's tempo.
+  // Re-measured every pulse, so it tracks tempo changes; the timestamp comes from
+  // the ISR (gSyncPulseMicros), not this 256Hz loop, so it isn't quantized.
+  static uint32_t lastSyncMicros = 0;
+  if (syncOk && !syncOutMode && gSyncPulseFlag) {
+    gSyncPulseFlag = false;   // consume — ISR may set it again immediately after
+    uint32_t pMicros = gSyncPulseMicros;   // snapshot the ISR timestamp
+    if (lastSyncMicros != 0) {
+      uint32_t dUs = pMicros - lastSyncMicros;
+      if (dUs > 5000 && dUs < 6000000) {   // ~10 BPM .. very fast sanity window
+        seq.interval = dUs / SYNC_STEPS_PER_PULSE;   // per-16th-step duration (us)
+        // BPM readout: one pulse = SYNC_STEPS_PER_PULSE sixteenths; a quarter is
+        // 4 of them, so quarterUs = dUs * 4 / SYNC_STEPS_PER_PULSE.
+        uint32_t quarterUs = (uint32_t)(((uint64_t)dUs * 4UL) / SYNC_STEPS_PER_PULSE);
+        if (quarterUs > 0) {
+          uint16_t newTempo = (uint16_t)constrain(60000000UL / quarterUs, 20, 300);
+          if (newTempo != seq.tempo) {
+            seq.tempo     = newTempo;
+            bmStoredTempo = (float)newTempo;  // drum value strip prints this
+            bmVsDirty     = true;             // ...so refresh it too
+            ui.barDirty   = true;
+            ui.infoDirty  = true;
+          }
+        }
+      }
+    }
+    lastSyncMicros = pMicros;
+  }
+
+  // SYNC OUT: pull the per-step gate low once its width elapses. The gate is
+  // driven HIGH per step by syncOutPulse() in the sequencer-advance block above.
+  // No-op whenever syncOutMode is false.
+  syncOutPoll();
 
   // If in BM mode hand off all further control to drum machine.
   // Arm the pot re-arm so returning to acid/DRIFT re-seeds pickup — the
@@ -6219,7 +6259,6 @@ void updateControl() {
                   seq.running = true;
                   seq.cur = seq.len - 1;
                   seq.lastUs = micros();
-                  syncPulse = 0;
                   if (chainActive) chainTickCount = 0;  // resync chain to the restarted loop
                 }
               } else {
@@ -6248,7 +6287,6 @@ void updateControl() {
                   seq.running = true;
                   seq.cur = seq.len - 1;
                   seq.lastUs = micros();
-                  syncPulse = 0;
                   if (chainActive) chainTickCount = 0;  // resync chain to the restarted loop
                 }
               } else {
@@ -6553,47 +6591,6 @@ void updateControl() {
   }
   lastMicron = micron;
 
-  // Sync — enabled only in sync mode (pad 14 held at boot)
-  syncOk = syncMode;  // sync active only when boot-selected
-
-  // SYNC IN — TEMPO SUBDIVISION. Your clock pulses once per beat, but acid
-  // sequences 16ths (SYNC_STEPS_PER_PULSE steps per pulse), so a pulse can't just
-  // advance one step (too slow, 4x) and can't burst 4 at once (rhythmically
-  // wrong). Instead, measure the interval between pulses and set seq.interval to
-  // interval / SYNC_STEPS_PER_PULSE — the internal clock above then plays exactly
-  // that many evenly-spaced steps across each pulse, at the source's tempo.
-  // Re-measured every pulse, so it tracks tempo changes; the timestamp comes from
-  // the ISR (gSyncPulseMicros), not this 256Hz loop, so it isn't quantized.
-  static uint32_t lastSyncMicros = 0;
-  if (syncOk && !syncOutMode && gSyncPulseFlag) {
-    gSyncPulseFlag = false;   // consume — ISR may set it again immediately after
-    uint32_t pMicros = gSyncPulseMicros;   // snapshot the ISR timestamp
-    if (lastSyncMicros != 0) {
-      uint32_t dUs = pMicros - lastSyncMicros;
-      if (dUs > 5000 && dUs < 6000000) {   // ~10 BPM .. very fast sanity window
-        seq.interval = dUs / SYNC_STEPS_PER_PULSE;   // per-16th-step duration (us)
-        // BPM readout: one pulse = SYNC_STEPS_PER_PULSE sixteenths; a quarter is
-        // 4 of them, so quarterUs = dUs * 4 / SYNC_STEPS_PER_PULSE.
-        uint32_t quarterUs = (uint32_t)(((uint64_t)dUs * 4UL) / SYNC_STEPS_PER_PULSE);
-        if (quarterUs > 0) {
-          uint16_t newTempo = (uint16_t)constrain(60000000UL / quarterUs, 20, 300);
-          if (newTempo != seq.tempo) {
-            seq.tempo    = newTempo;
-            ui.barDirty  = true;
-            ui.infoDirty = true;
-          }
-        }
-      }
-    }
-    lastSyncMicros = pMicros;
-  }
-
-  // SYNC OUT: pull the per-step gate low once its width elapses. The gate is
-  // driven HIGH per step by syncOutPulse() in the sequencer-advance block above.
-  // No-op whenever syncOutMode is false.
-  syncOutPoll();
-
-
 }
 
 // =====================================================================
@@ -6873,9 +6870,37 @@ void setup() {
     pLast[i] = LOW;
   }
 
+  // EEPROM has to be live BEFORE the TFT: the saved sync direction decides
+  // whether GP8 may be used as the panel's hardware reset at all (see the
+  // reset block just below). Moved up from the boot-detect block; nothing in
+  // between touches EEPROM.
+  EEPROM.begin(EEPROM_SIZE);
+  const uint8_t savedSyncDir = loadSyncCfg();
+
   SPI.setTX(TFT_MOSI);
   SPI.setSCK(TFT_SCK);
   SPI.begin();
+
+  // ── PANEL RESET (GP8 only when it is NOT the sync pin) ───────────────
+  // tft is constructed with RST = -1, so the library never drives a pin and
+  // only sends SWRESET. That is correct for the AZSMZ board: its LCD RST is
+  // tied to 3V3 and GP8 is the SYNC JACK — a hardware-reset pulse there
+  // would be transmitted straight to whatever is plugged into SYNC OUT.
+  //
+  // A saved direction of NONE means this unit is either the upstream
+  // original board (where GP8 really IS the panel reset) or a fresh unit
+  // that has never chosen GP8. Pulse GP8 there, exactly like Adafruit's
+  // initSPI() used to.
+  if (savedSyncDir == SYNC_DIR_NONE) {
+    pinMode(TFT_RST, OUTPUT);
+    digitalWrite(TFT_RST, HIGH);
+    delay(10);
+    digitalWrite(TFT_RST, LOW);
+    delay(10);
+    digitalWrite(TFT_RST, HIGH);
+    delay(120);
+  }
+
   tft.begin(24000000);
   tft.setRotation(3);
 #ifdef PANEL_NEEDS_Y_MIRROR
@@ -6915,11 +6940,8 @@ void setup() {
   delay(50);  // allow pullup to settle
   bool bootP14Held = (digitalRead(PAD_PINS[13]) == LOW);
 
-  // EEPROM has to be live before the menu: the saved direction is read here
-  // and a new choice is written straight back. (Moved up from below — the
-  // rest of setup() is untouched by the move.)
-  EEPROM.begin(EEPROM_SIZE);
-  const uint8_t savedSyncDir = loadSyncCfg();
+  // EEPROM was opened and savedSyncDir read at the top of setup(), before
+  // the TFT — the panel-reset decision needs it.
 
   if (bootP14Held) {
     // SYNC SETUP menu — block here until one of pads 1-4 is pressed.

@@ -167,6 +167,7 @@ extern void   bmFillScreenFed(uint16_t color);  // banded full-screen clear — 
 extern void   bmDrawDrumFlash();
 extern uint32_t bmLastFlashDraw;
 extern float    bmStoredTempo;
+extern bool     bmVsDirty;
 extern bool     bmPChord[16];
 extern bool     bmPState[16];
 extern bool     bmP11Deferred;
@@ -378,14 +379,14 @@ void recomputeMixGains() {
 #define POT_RES   28
 #define POT_DECAY 27
 
-// SYNC IN pulse detection — interrupt-driven, not polled. DIN-sync-style
-// clock pulses (24 PPQN, the TB-303/909 standard) are commonly only 1-2ms
-// wide; polling at MOZZI_CONTROL_RATE (~3.9ms/cycle, see below) risks
-// missing narrow pulses entirely, especially at higher tempos. An ISR
-// catches every rising edge regardless of width or CPU timing; the
-// control-rate code just checks and clears this flag once per cycle.
-volatile bool gSyncPulseFlag = false;
-void syncPulseISR() { gSyncPulseFlag = true; }
+// SYNC IN pulse detection — interrupt-driven, not polled. Polling at
+// MOZZI_CONTROL_RATE (~3.9ms/cycle, see below) would quantize the measured
+// interval to that period and show up as a ±1 BPM flicker on the readout.
+// The ISR stamps micros() on every rising edge; the control-rate code
+// compares two stamps, so the measurement is not quantized.
+volatile bool     gSyncPulseFlag   = false;
+volatile uint32_t gSyncPulseMicros = 0;
+void syncPulseISR() { gSyncPulseMicros = micros(); gSyncPulseFlag = true; }
 
 // 16 pads — top row (steps 1-8): applies FUNC values / FX assign phase 1+2
 //           bottom row (steps 9-16): selects FUNC function in FUNC mode
@@ -468,7 +469,11 @@ const uint8_t PAD_PINS[16] = {
                         // and is near-complementary to amber — it pops
                         // hardest on exactly the cells that matter.
 
-Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, TFT_RST);
+// RST = -1: the library only sends SWRESET and never drives a pin. setup()
+// pulses TFT_RST by hand ONLY on hardware where GP8 is the panel reset (the
+// upstream original board) — on the AZSMZ board GP8 is the SYNC JACK and must
+// never be toggled at boot.
+Adafruit_ILI9341 tft = Adafruit_ILI9341(&SPI, TFT_DC, TFT_CS, -1);
 
 // =====================================================================
 // NOTE FREQUENCY TABLE
@@ -1327,31 +1332,20 @@ bool     syncMode=false;     // true = sync active this boot (either direction) 
 bool     syncOutMode=false;  // direction, valid only when syncMode is true:
                               // false = SYNC IN (the sync pin listens for an
                               // external clock). true = SYNC OUT (the sync
-                              // pin generates a DIN-sync-style clock from
-                              // this device's own tempo). Direction is picked
+                              // pin generates a 1 PPQN clock from this
+                              // device's own tempo). Direction is picked
                               // at boot from the SYNC SETUP menu — see
                               // setup()'s BOOT MODE DETECT.
-uint32_t syncOutPeriodUs = 0;   // current inter-pulse period being driven,
-                                 // 0 = not yet set / not running — lets the
-                                 // control-rate updater skip reprogramming the
-                                 // PWM hardware unless the tempo has actually
-                                 // moved, avoiding needless register writes.
-bool     syncOutRunning = false; // whether GP2's PWM is currently emitting a
-                                  // pulse train (mirrors seq.running while in
-                                  // SYNC OUT mode) — see syncOutUpdate().
-#define  SYNC_OUT_PPQN        24    // DIN sync standard (TB-303/808/909) — pulses
-                                     // per quarter note. Matches the PPQN meaning
-                                     // syncDiv already uses on the input side.
-#define  SYNC_OUT_PULSE_US  2000    // fixed pulse width, regardless of tempo.
-                                     // 2ms sits comfortably inside typical DIN
-                                     // sync gear's expected pulse width (roughly
-                                     // 1-5ms) and stays a safe fraction of the
-                                     // inter-pulse period across the full 20-300
-                                     // BPM range (about 1.6%-24% duty).
-#define  SYNC_OUT_PWM_RANGE 4095    // analogWrite() resolution for GP8 while in
-                                     // SYNC OUT mode — high enough that a 2ms
-                                     // pulse is still represented precisely even
-                                     // at the longest (lowest-BPM) periods.
+// SYNC OUT is a plain digital gate, one pulse per beat (1 PPQN) — the same
+// engine the original-sound variant uses. The analogWrite() PWM pulse-train
+// this file used to carry (24 PPQN, 2 ms) is gone: at 1 PPQN the PWM period
+// is 0.5-3 s and the pin smears into a steady voltage instead of producing
+// distinct pulses. A gate that is HIGH for SYNC_OUT_PULSE_MS and driven LOW
+// by syncOutPoll() is what per-step-clocked gear actually expects.
+#define  SYNC_STEPS_PER_PULSE  4    // sequencer 16th-note steps per sync pulse
+#define  SYNC_OUT_PULSE_MS    15    // gate width, independent of tempo
+uint8_t  syncOutStepCtr    = 0;     // 0..SYNC_STEPS_PER_PULSE-1
+uint32_t syncOutPulseOffMs = 0;     // millis() deadline to pull the gate low; 0 = idle
 
 // ── DRIFT OUTPUT ──────────────────────────────────────────────────────
 // Settled behavior: ACID lives on GP15 (this file's updateAudio()), alone,
@@ -2009,16 +2003,6 @@ volatile uint32_t ch2NoisePhase = 0;     // NOIZ: clock accumulator — sets noi
 volatile uint32_t ch2VowP1      = 0;     // VOWEL: formant-1 phase (absolute Hz, not a ratio)
 volatile uint32_t ch2VowP2      = 0;     // VOWEL: formant-2 phase
 volatile uint32_t ch2GatePhase  = 0;     // GATE: chop phase, free-running and pitch-independent
-uint32_t syncMs=0;
-#define  SYNCTOUT 2000
-
-// Sync pulse divider — pulses per quarter note from the source.
-// Set to 1 for 1 PPQN sources (1 pulse per beat — most common on simple gear).
-// Set to 2 for 2 PPQN (1 pulse per 8th note — Badass Bass original).
-// Set to 24 for DIN sync standard (Roland TR-808/909/TB-303).
-uint8_t  syncDiv     = 1;
-uint8_t  syncPulse   = 0;
-
 // =====================================================================
 // HELPERS
 // =====================================================================
@@ -3055,7 +3039,6 @@ void loadAllFromSlot(uint8_t slot) {
     seq.running = true;
     seq.cur = seq.len - 1;
     seq.lastUs = micros();
-    syncPulse = 0;
     if (chainActive) chainTickCount = 0;
   } else if (!clockWanted) {
     seq.running = false;
@@ -4898,56 +4881,34 @@ void doModeSwitch() {
   rp2040.fifo.push_nb(bmMode ? 2u : 3u);
 }
 
-// SYNC OUT: drives GP8 as a hardware-PWM pulse train derived from this
-// device's own tempo, when syncOutMode is active (see the BOOT MODE
-// DETECT block in setup()). No-op otherwise. Called every
-// updateControl() tick (256Hz); only touches the PWM hardware when the
-// driven period has actually changed, or when starting/stopping, to
-// keep this to a handful of register writes per tempo change rather
-// than per tick.
+// SYNC OUT: a plain digital gate, one pulse per beat (1 PPQN).
+// syncOutPulse() is called once per sequencer step (right after
+// advanceStep()) and raises the pin on every SYNC_STEPS_PER_PULSE-th step;
+// syncOutPoll() (every updateControl() tick) pulls it low again after
+// SYNC_OUT_PULSE_MS. Same engine as the original-sound variant — the old
+// analogWrite() PWM train smeared into a steady voltage at 1 PPQN.
 //
-// Design notes:
-// - SYNC_OUT_PPQN (24) matches DIN sync standard, spread evenly across
-//   each quarter note using seq.interval (the current 16th-note duration
-//   in microseconds, already tracked for SYNC IN / internal timing) —
-//   one quarter is 4x that, and PPQN pulses are spaced quarterUs/PPQN
-//   apart.
-// - Pulses only run while seq.running is true. DIN sync has no separate
-//   start/stop message; the convention this follows is that the clock
-//   line simply goes idle (held low) when the source transport stops,
-//   rather than free-running through a stopped pattern — most receiving
-//   gear treats "pulses present" as "running".
-// - Pulse WIDTH is held constant (SYNC_OUT_PULSE_US) across tempo, not a
-//   fixed duty percentage — the duty value fed to analogWrite() is
-//   recomputed from the new period every time the period changes, so
-//   the pulse looks the same width to receiving gear at 20 BPM as it
-//   does at 300 BPM.
-void syncOutUpdate() {
+// Pulses only run while seq.running is true, i.e. while ANY engine wants the
+// clock (acid transport, DRIFT, or drums playing on their own). DIN sync has
+// no separate start/stop message; the convention followed here is that the
+// clock line simply goes idle (held low) when the transport stops, rather
+// than free-running through a stopped pattern.
+void syncOutPulse() {   // called once per step (right after advanceStep)
   if (!syncOutMode) return;
-
-  if (!seq.running) {
-    if (syncOutRunning) {
-      analogWrite(gSyncPin, 0);     // pulses off, line idle low
-      syncOutRunning  = false;
-      syncOutPeriodUs = 0;         // force a fresh reprogram on the next start
-    }
-    return;
+  if (syncOutStepCtr == 0) {            // emit on every SYNC_STEPS_PER_PULSE-th step
+    digitalWrite(gSyncPin, HIGH);      // the sync pin (GP8 by default)
+    syncOutPulseOffMs = millis() + SYNC_OUT_PULSE_MS;  // schedule the pull-low
+    if (syncOutPulseOffMs == 0) syncOutPulseOffMs = 1; // 0 is the idle sentinel
   }
-
-  uint32_t quarterUs = seq.interval * 4UL;
-  uint32_t periodUs  = quarterUs / SYNC_OUT_PPQN;
-  if (periodUs < 100) periodUs = 100;  // sanity floor — guards the divide
-                                        // below rather than asking the PWM
-                                        // hardware for an implausible rate
-
-  if (periodUs != syncOutPeriodUs) {
-    syncOutPeriodUs = periodUs;
-    analogWriteFreq(1000000UL / periodUs);
-    uint32_t duty = (uint32_t)(((uint64_t)SYNC_OUT_PULSE_US * SYNC_OUT_PWM_RANGE) / periodUs);
-    if (duty >= SYNC_OUT_PWM_RANGE) duty = SYNC_OUT_PWM_RANGE - 1;  // never fully-on
-    analogWrite(gSyncPin, duty);
+  if (++syncOutStepCtr >= SYNC_STEPS_PER_PULSE) syncOutStepCtr = 0;
+}
+void syncOutPoll() {
+  if (!syncOutMode) return;
+  if (!seq.running) syncOutStepCtr = 0;  // re-arm so the next start pulses on step 0
+  if (syncOutPulseOffMs && (int32_t)(millis() - syncOutPulseOffMs) >= 0) {
+    digitalWrite(gSyncPin, LOW);
+    syncOutPulseOffMs = 0;
   }
-  syncOutRunning = true;
 }
 
 // =====================================================================
@@ -4967,7 +4928,6 @@ void updateControl() {
         seq.running = true;
         seq.cur = seq.len - 1;
         seq.lastUs = micros();
-        syncPulse = 0;
         bmStepNum = 0; bmPulseNum = 0;
         if (chainActive) chainTickCount = 0;  // resync chain to the restarted loop
       }
@@ -5034,7 +4994,6 @@ void updateControl() {
             if (!seq.running) {
               seq.running = true;
               seq.lastUs = micros();
-              syncPulse = 0;
             }
           }
         }
@@ -5172,6 +5131,7 @@ void updateControl() {
       // (prevents cascade of rapid fires after a long delay)
       if (us - seq.lastUs >= seq.interval) seq.lastUs = us - (seq.interval >> 1);
       advanceStep();
+      syncOutPulse();   // SYNC OUT: gate every SYNC_STEPS_PER_PULSE steps (no-op otherwise)
     }
   }
 
@@ -5199,6 +5159,47 @@ void updateControl() {
     }
     if (changed) { recomputeMixGains(); ui.barDirty = true; }
   }
+
+  // ── SYNC (must stay ABOVE the bmMode return below) ──────────────────
+  // When this block sat after the return, the entire sync path was dead on
+  // the drum screen: SYNC OUT raised the gate on the first step and nothing
+  // pulled it low again, and SYNC IN never read the ISR flag, so a slave
+  // parked on the drum screen ignored the clock.
+  syncOk = syncMode;  // sync active only when boot-selected
+
+  // SYNC IN — TEMPO SUBDIVISION. One pulse per beat, four 16th-note steps per
+  // pulse: measure the interval between pulses and set seq.interval to
+  // interval / SYNC_STEPS_PER_PULSE, so the internal clock plays that many
+  // evenly-spaced steps across the pulse at the source's tempo. Re-measured
+  // on every pulse (tracks tempo changes); the timestamp comes from the ISR,
+  // not this 256 Hz loop, so the measurement is not quantized.
+  static uint32_t lastSyncMicros = 0;
+  if (syncOk && !syncOutMode && gSyncPulseFlag) {
+    gSyncPulseFlag = false;   // consume — ISR may set it again immediately after
+    uint32_t pMicros = gSyncPulseMicros;   // snapshot the ISR timestamp
+    if (lastSyncMicros != 0) {
+      uint32_t dUs = pMicros - lastSyncMicros;
+      if (dUs > 5000 && dUs < 6000000) {   // ~10 BPM .. very fast sanity window
+        seq.interval = dUs / SYNC_STEPS_PER_PULSE;   // per-16th-step duration (us)
+        uint32_t quarterUs = (uint32_t)(((uint64_t)dUs * 4UL) / SYNC_STEPS_PER_PULSE);
+        if (quarterUs > 0) {
+          uint16_t newTempo = (uint16_t)constrain(60000000UL / quarterUs, 20, 300);
+          if (newTempo != seq.tempo) {
+            seq.tempo     = newTempo;
+            bmStoredTempo = (float)newTempo;  // drum value strip prints this
+            bmVsDirty     = true;             // ...so refresh it too
+            ui.barDirty   = true;
+            ui.infoDirty  = true;
+          }
+        }
+      }
+    }
+    lastSyncMicros = pMicros;
+  }
+
+  // SYNC OUT: pull the gate low once its width elapses. Raised per step by
+  // syncOutPulse() in the sequencer-advance block above. No-op otherwise.
+  syncOutPoll();
 
   // If in BM mode hand off all further control to drum machine
   if (bmMode) { return; }
@@ -5684,7 +5685,6 @@ void updateControl() {
                   seq.running = true;
                   seq.cur = seq.len - 1;
                   seq.lastUs = micros();
-                  syncPulse = 0;
                   if (chainActive) chainTickCount = 0;  // resync chain to the restarted loop
                 }
               } else {
@@ -5713,7 +5713,6 @@ void updateControl() {
                   seq.running = true;
                   seq.cur = seq.len - 1;
                   seq.lastUs = micros();
-                  syncPulse = 0;
                   if (chainActive) chainTickCount = 0;  // resync chain to the restarted loop
                 }
               } else {
@@ -6017,56 +6016,6 @@ void updateControl() {
   }
   lastMicron = micron;
 
-  // Sync — enabled only in sync mode (pad 14 held at boot)
-  bool sr = false;
-  syncOk = syncMode;  // sync active only when boot-selected
-  if (syncOk && !syncOutMode && gSyncPulseFlag) {
-    gSyncPulseFlag = false;  // consume — ISR may set it again immediately after
-    sr = true;
-  }
-
-  // Sync clock tracking (SYNC IN only — gSyncPulseFlag is never set in
-  // SYNC OUT mode since the ISR is never attached there, but the explicit
-  // !syncOutMode guard documents that this whole block is direction-scoped):
-  // Measure the interval between rising edges, derive BPM, then let the
-  // internal clock run steps at that tempo. This works correctly whether
-  // the source sends 1 PPQN (1 pulse/quarter), 2 PPQN, 24 PPQN, etc —
-  // as long as syncDiv is set to match the source's PPQN.
-  //
-  // syncDiv = pulses per quarter note from the source:
-  //   1  = 1 PPQN  (Volca, simple clock outputs — 1 pulse per beat)
-  //   2  = 2 PPQN  (some Korg gear — 1 pulse per 8th note)
-  //   24 = 24 PPQN (DIN sync standard — Roland TR-808/909/TB-303)
-  //
-  // The measured pulse interval × syncDiv = one quarter note duration,
-  // which is used to update seq.interval (= one 16th note = quarter/4).
-  static uint32_t lastSyncEdgeMs = 0;
-  if (syncOk && !syncOutMode && sr) {
-    syncPulse++;
-    if (syncPulse >= syncDiv) {
-      syncPulse = 0;
-      // One quarter note has elapsed — measure and update tempo
-      if (lastSyncEdgeMs > 0) {
-        uint32_t quarterMs = now - lastSyncEdgeMs;
-        if (quarterMs > 50 && quarterMs < 3000) {  // sanity: 20-1200 BPM
-          // One 16th note = quarter / 4, converted to microseconds
-          seq.interval = (uint32_t)(quarterMs * 250UL);  // ms*1000/4 = ms*250
-          uint16_t newTempo = (uint16_t)constrain(60000UL / quarterMs, 20, 300);
-          if (newTempo != seq.tempo) {
-            seq.tempo   = newTempo;
-            ui.barDirty = true;
-            ui.infoDirty= true;
-          }
-        }
-      }
-      lastSyncEdgeMs = now;
-    }
-  }
-
-  // SYNC OUT: drive GP2's pulse train from this device's own tempo. See
-  // syncOutUpdate() for the reasoning; a no-op whenever syncOutMode is false.
-  syncOutUpdate();
-
 }
 
 // =====================================================================
@@ -6369,9 +6318,37 @@ void setup() {
     pLast[i] = LOW;
   }
 
+  // EEPROM has to be live BEFORE the TFT: the saved sync direction decides
+  // whether GP8 may be used as the panel's hardware reset at all (see the
+  // reset block just below). Moved up from the boot-detect block; nothing in
+  // between touches EEPROM.
+  EEPROM.begin(EEPROM_SIZE);
+  const uint8_t savedSyncDir = loadSyncCfg();
+
   SPI.setTX(TFT_MOSI);
   SPI.setSCK(TFT_SCK);
   SPI.begin();
+
+  // ── PANEL RESET (GP8 only when it is NOT the sync pin) ───────────────
+  // tft is constructed with RST = -1, so the library never drives a pin and
+  // only sends SWRESET. That is correct for the AZSMZ board: its LCD RST is
+  // tied to 3V3 and GP8 is the SYNC JACK — a hardware-reset pulse there
+  // would be transmitted straight to whatever is plugged into SYNC OUT.
+  //
+  // A saved direction of NONE means this unit is either the upstream
+  // original board (where GP8 really IS the panel reset) or a fresh unit
+  // that has never chosen GP8. Pulse GP8 there, exactly like Adafruit's
+  // initSPI() used to.
+  if (savedSyncDir == SYNC_DIR_NONE) {
+    pinMode(TFT_RST, OUTPUT);
+    digitalWrite(TFT_RST, HIGH);
+    delay(10);
+    digitalWrite(TFT_RST, LOW);
+    delay(10);
+    digitalWrite(TFT_RST, HIGH);
+    delay(120);
+  }
+
   tft.begin(24000000);
   tft.setRotation(3);
 #ifdef PANEL_NEEDS_Y_MIRROR
@@ -6415,11 +6392,8 @@ void setup() {
   delay(50);  // allow pullup to settle
   bool bootP14Held = (digitalRead(PAD_PINS[13]) == LOW);
 
-  // EEPROM has to be live before the menu: the saved direction is read here
-  // and a new choice is written straight back. (Moved up from below — the
-  // rest of setup() is untouched by the move.)
-  EEPROM.begin(EEPROM_SIZE);
-  const uint8_t savedSyncDir = loadSyncCfg();
+  // EEPROM was opened and savedSyncDir read at the top of setup(), before
+  // the TFT — the panel-reset decision needs it.
 
   if (bootP14Held) {
     // SYNC SETUP menu — block here until one of pads 1-4 is pressed.
@@ -6547,23 +6521,19 @@ void setup() {
     // bmFillDrumBufferTo() early-returns. The drum/DRIFT output is silent
     // for that session.
   } else if (syncOutMode) {
-    // SYNC OUT: the sync pin becomes a hardware-PWM-driven pulse output
-    // instead — free-running once programmed, near-zero CPU cost, no ISR
-    // jitter.
-    // analogWriteFreq()/analogWriteRange() set the shape (frequency and
-    // resolution); syncOutUpdate() (called every updateControl() tick)
-    // reprograms the frequency and starts/stops the train to track tempo
-    // and play state. Nothing is emitted until playback actually starts —
-    // see syncOutUpdate() below.
+    // SYNC OUT: the sync pin is a plain digital output. The sequencer drives
+    // it HIGH once per step (syncOutPulse(), from the sequencer-advance
+    // block) and syncOutPoll() pulls it LOW after SYNC_OUT_PULSE_MS — a real
+    // digital gate, matching every other synth in the ecosystem. Nothing is
+    // emitted until the transport runs; the line idles low.
     //
     // On the MODIFIED board the sync pin is GP8, so GP2 audio stays live and
     // the drums and DRIFT keep sounding while this machine clocks other
     // gear. On the ORIGINAL board the sync pin is GP2: bmStartAudio() was
-    // skipped above, so GP2 is free for the PWM clock train and the
-    // drum/DRIFT output is silent for that session.
+    // skipped above, so GP2 is free for the clock and the drum/DRIFT output
+    // is silent for that session.
     pinMode(gSyncPin, OUTPUT);
     digitalWrite(gSyncPin, LOW);
-    analogWriteRange(SYNC_OUT_PWM_RANGE);
   }
 
   // Reflect the boot choice in the top-bar badge immediately — updateAudio()
