@@ -1,6 +1,6 @@
 # Acid Drip - Bassline Synth, Drift Synth & Drum Machine
 
-> **This is a hardware-adapted fork.** Original project: [lonesoulsurfer/Acid_Drip](https://github.com/lonesoulsurfer/Acid_Drip_Bassline_and_Drum_Synth) by Marcus.
+> **This is a hardware-adapted fork.** Original project: [lonesoulsurfer/Acid_Drip](https://github.com/lonesoulsurfer/Acid_Drip_Bassline_and_Drum_Synth) by Marcus. Firmware is GPL-3.0; upstream hardware files are CERN-OHL-S-2.0 — see [LICENSING.md](LICENSING.md).
 >
 > Local changes in this build:
 > - The sync clock pin is picked **at boot** — GPIO8 on the modified board (LCD RST jumpered to 3V3 to free it) or GPIO2 on the original PCB. One firmware serves both boards; no recompile needed.
@@ -37,9 +37,9 @@ NOTE: V5 firmware adds a second synth voice called DRIFT, pattern chaining for t
 | MCU | RP2040 (Raspberry Pi Pico or equivalent) |
 | Display | ILI9341 320x240 TFT |
 | Pads | 16x Cherry MX switches (2 rows of 8) |
-| Pots | 3x analog (CUT, RES, DECAY) |
-| Audio out (acid) | GP15 -> 100R + 10nF RC filter -> 3.5mm jack |
-| Audio out (drums) | GP2 -> 470R resistor -> 3.5mm jack. In V5 this output also carries the DRIFT synth voice, summed with the drums |
+| Pots | 4x 10K: CUT / RES / DECAY analog (GP26 / GP28 / GP27) + MIX balance (goes straight into the audio node, not an ADC input) |
+| Audio out (acid) | GP15 -> R3 10K -> node; C7 10nF + R1 3.3K from node to GND (0.25 divider, ~6.4 kHz low-pass) -> C6 10uF (V5 original: 100uF) -> 3.5mm jack |
+| Audio out (drums) | GP2 -> SPDT (audio/sync) -> MIX balance pot (10K, wiper to the node, 4.7K from the other end to GND) -> the same node. In V5 this output also carries the DRIFT synth voice, summed with the drums |
 | Sync in/out | Chosen at boot from the SYNC SETUP menu: **GPIO8** on the modified board (the LCD RST line was moved off GP8 to 3V3 to free it) or **GPIO2** on the original PCB. The direction (in or out) is picked in the same menu, see Sync In/Out below |
 
 
@@ -441,4 +441,16 @@ MIX EDIT's per-engine levels (V5) are a digital trim applied on top of this, ind
 - Acid synthesis engine adapted from *Badass Bass*  https://www.youtube.com/watch?v=MvDILHYImc4
 - Drum engine adapted from **DrumKid** by Matt Bradshaw  https://www.youtube.com/watch?v=509iZGjnVhM
 - Built with the [Mozzi](https://sensorium.github.io/Mozzi/) audio library
-- Hardware design and firmware by Marcus ([lonesoulsurfer](https://github.com/lonesoulsurfer))
+- Original Acid Drip project and firmware by Marcus ([lonesoulsurfer](https://github.com/lonesoulsurfer))
+- Board, front panel and enclosure for this fork by cxandy, drawn from scratch in JLCEDA
+
+---
+
+## Licence
+
+- **Firmware: GPL-3.0** — see [LICENSE](LICENSE). Source: https://github.com/cxandy/Acid_Drip
+- **Upstream hardware files in this repository: CERN-OHL-S-2.0** — see [LICENSE-HARDWARE](LICENSE-HARDWARE)
+- This fork's own board/panel/enclosure design is not derived from the upstream files and is not covered by CERN-OHL-S-2.0.
+- "Acid Drip" is the original project's name; the licences do not grant trademark rights.
+
+Details and the modification list: [LICENSING.md](LICENSING.md) and [README.md](README.md).
