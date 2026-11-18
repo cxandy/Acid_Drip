@@ -2349,11 +2349,7 @@ void triggerNote(uint8_t freqIdx, bool accent, bool gl) {
   }
 
   gVolSub    = accent ? -60 : 30;  // accent = boosted above full volume, normal = slight attenuation
-#if AB_PROFILE == 2
-  gEnvCutoff = accent ? (int16_t)min((int)gEnvCutNorm * 2, 255) : gEnvCutNorm;  // 303 cutoff sweep (needs CUT pot low); accent auto-scales
-#else
-  gEnvCutoff = accent ? (int16_t)ENV_ACCENT_CUTOFF : (int16_t)ENV_CUTOFF_NORMAL;  // A/B: fixed historical envelope, EEPROM-independent
-#endif
+  gEnvCutoff = accent ? (int16_t)ENV_ACCENT_CUTOFF : (int16_t)ENV_CUTOFF_NORMAL;  // A/B: fixed profile envelope, EEPROM-independent
   gEnvRes    = accent ? ACCENT_RES_FIXED    : ENV_RES_NORMAL;     // resonance sweep (caps at gResCap)
   gAccentActive = accent;  // accented notes get a slower filter-envelope decay (303-style "wah")
   gLastStepMs= millis();
