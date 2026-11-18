@@ -1,0 +1,59 @@
+name: A/B sound build
+
+# Temporary: builds the same sketch three times with only the acid filter /
+# envelope profile changed (AB_PROFILE 0/1/2). Pushing the ab-test branch
+# triggers it; artifacts are named by profile number.
+on:
+  push:
+    branches: [ab-test]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ab profiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install arduino-cli
+        uses: arduino/setup-arduino-cli@v2
+        with:
+          version: 1.1.1
+
+      - name: Install RP2040 core
+        run: |
+          arduino-cli config init --overwrite
+          arduino-cli config set board_manager.additional_urls \
+            https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+          arduino-cli core update-index
+          arduino-cli core install rp2040:rp2040
+
+      - name: Install libraries
+        run: |
+          arduino-cli lib install "Adafruit GFX Library" "Adafruit ILI9341"
+          arduino-cli lib install "Mozzi@2.0.4"
+
+      - name: Compile three profiles
+        run: |
+          set -e
+          mkdir -p dist
+          for p in 0 1 2; do
+            echo "=== AB_PROFILE=$p ==="
+            arduino-cli compile \
+              --fqbn rp2040:rp2040:rpipico \
+              --warnings default \
+              --build-property "compiler.cpp.extra_flags=-DAB_PROFILE=$p" \
+              --build-path "${{ github.workspace }}/build/p$p" \
+              Firmware/Acid_Drip_Drum_Acid_Drift_V5
+            cp "build/p$p"/*.uf2 "dist/AB_$p.uf2"
+          done
+          ls -l dist
+          sha256sum dist/*.uf2
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ab-firmware
+          path: dist/*.uf2
+          if-no-files-found: error

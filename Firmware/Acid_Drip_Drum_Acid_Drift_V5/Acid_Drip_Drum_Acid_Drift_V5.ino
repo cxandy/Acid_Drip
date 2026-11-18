@@ -357,9 +357,28 @@ uint16_t chainTickCount = 0;      // steps elapsed since the last chain advance
 // must play with the CUT pot LOW (dark rest) so the envelope has room to open
 // it — exactly like a real 303 (cutoff down, env-mod up). With CUT high the
 // envelope just slams into the 255 ceiling and you hear no wah.
+// ── A/B LISTENING TEST ONLY (temporary) ──────────────────────────────
+// 0 = V4-flavoured single 2-pole, 1 = v5.0.0-flavoured single 2-pole,
+// 2 = shipping local 4-pole cascade. Override with -DAB_PROFILE=n.
+#ifndef AB_PROFILE
+#define AB_PROFILE 2
+#endif
+#if AB_PROFILE == 0
+#define ENV_CUTOFF_NORMAL    30    // V4 normal-note cutoff env peak
+#define ENV_ACCENT_CUTOFF    90    // V4 accent peak cutoff boost
+#define ENV_RES_NORMAL        0    // V4 normal-note resonance env peak
+#define ACCENT_RES_FIXED     90    // V4 accent peak resonance boost
+#elif AB_PROFILE == 1
+#define ENV_CUTOFF_NORMAL    30    // v5.0.0 normal-note cutoff env peak
+#define ENV_ACCENT_CUTOFF    40    // v5.0.0 accent peak cutoff boost ("low")
+#define ENV_RES_NORMAL        0    // v5.0.0 normal-note resonance env peak
+#define ACCENT_RES_FIXED    200    // v5.0.0 accent peak resonance boost
+#else
 #define ENV_CUTOFF_NORMAL    90    // SEED: normal-note cutoff env peak — sweep depth
+#define ENV_ACCENT_CUTOFF   180    // accent = 2x normal (v5.1.0 default)
 #define ENV_RES_NORMAL       50    // normal-note resonance env peak (fixed, not a knob)
 #define ACCENT_RES_FIXED    200    // accent peak resonance boost (capped at gResCap in the cascade)
+#endif
 #define ENV_DECAY_NORMAL      5    // SEED: normal env decay divisor (HIGHER = slower/longer sweep)
 #define ACCENT_DECAY_FIXED   10    // accent envelope decay divisor (1-20) — "mid"
 // Resonance divisor for the cascade branch (ACID_LPF_4POLE). The filter
@@ -820,7 +839,11 @@ volatile int16_t filtB = 0;
 // hardware however it was tuned. The cascade keeps the topology that actually
 // resonates here and just doubles the slope. Set ACID_LPF_4POLE to 0 to fall
 // back to the single 2-pole (12 dB/oct) in one line.
+#if AB_PROFILE == 2
 #define ACID_LPF_4POLE 1
+#else
+#define ACID_LPF_4POLE 0
+#endif
 volatile int16_t filtA2 = 0, filtB2 = 0;
 // ---- Higher-precision filter (ACID_LPF_HP) --------------------------------
 // Same dual-2-pole SVF topology, but run with Q8 int32 states so the resonant
@@ -2326,7 +2349,11 @@ void triggerNote(uint8_t freqIdx, bool accent, bool gl) {
   }
 
   gVolSub    = accent ? -60 : 30;  // accent = boosted above full volume, normal = slight attenuation
+#if AB_PROFILE == 2
   gEnvCutoff = accent ? (int16_t)min((int)gEnvCutNorm * 2, 255) : gEnvCutNorm;  // 303 cutoff sweep (needs CUT pot low); accent auto-scales
+#else
+  gEnvCutoff = accent ? (int16_t)ENV_ACCENT_CUTOFF : (int16_t)ENV_CUTOFF_NORMAL;  // A/B: fixed historical envelope, EEPROM-independent
+#endif
   gEnvRes    = accent ? ACCENT_RES_FIXED    : ENV_RES_NORMAL;     // resonance sweep (caps at gResCap)
   gAccentActive = accent;  // accented notes get a slower filter-envelope decay (303-style "wah")
   gLastStepMs= millis();
