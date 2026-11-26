@@ -79,7 +79,7 @@
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 4mm; align-items: start; }
   .compact { font-size: 6.45pt; line-height: 1.16; }
   .compact table { font-size: 5.85pt; margin: 0.3mm 0 0.9mm; line-height: 1.16; }
-  .compact th, .compact td { padding: 0.36mm 1.05mm; }
+  .compact th, .compact td { padding: 0.30mm 1.05mm; }
   .compact h2 { font-size: 8.6pt; margin: 1.4mm 0 0.75mm; }
   .compact h3 { font-size: 6.9pt; margin: 0.85mm 0 0.42mm; }
   .compact p, .compact ul, .compact ol { margin-bottom: 0.8mm; }
@@ -229,8 +229,9 @@ Pad GPIO    : top row 1-8 → GP14 GP12 GP11 GP16 GP17 GP19 GP20 GP21
     <tr><td class="k"><kbd>1</kbd>+<kbd>2</kbd></td><td>Play / stop</td></tr>
     <tr><td class="k"><kbd>1</kbd>+<kbd>2</kbd> (hold 0.5 s)</td><td>Factory reset the current engine (Acid or DRIFT); in drum mode, hold 1 s to reset the drums</td></tr>
     <tr><td class="k"><kbd>7</kbd>+<kbd>8</kbd></td><td>Enter / leave FUNC mode</td></tr>
-    <tr><td class="k"><kbd>9</kbd>+<kbd>10</kbd></td><td>Switch to drums (or back to Acid/DRIFT)</td></tr>
-    <tr><td class="k"><kbd>9</kbd>+<kbd>10</kbd>+<kbd>11</kbd> (0.5 s)</td><td>Acid ↔ DRIFT (V5)</td></tr>
+    <tr><td class="k"><kbd>9</kbd>+<kbd>10</kbd> (hold 0.5 s)</td><td>Switch to drums (or back to Acid/DRIFT)</td></tr>
+    <tr><td class="k"><kbd>9</kbd>+<kbd>10</kbd>+<kbd>11</kbd> (hold 0.5 s)</td><td>Acid ↔ DRIFT (V5)</td></tr>
+    <tr><td class="k"><kbd>1</kbd>+<kbd>9</kbd> (hold 1 s)</td><td>Filter SETTINGS (Acid screen only; see 5.9)</td></tr>
     <tr><td class="k"><kbd>11</kbd>+<kbd>12</kbd>+<kbd>13</kbd>+<kbd>14</kbd> (1 s)</td><td>Toggle the Acid Walks easter egg</td></tr>
     <tr><td class="k"><kbd>12</kbd>+<kbd>13</kbd></td><td>Enter / leave chain-build mode</td></tr>
     <tr><td class="k"><kbd>15</kbd>+<kbd>16</kbd> (1 s)</td><td>Toggle MIX EDIT mode</td></tr>
@@ -299,6 +300,9 @@ Pad GPIO    : top row 1-8 → GP14 GP12 GP11 GP16 GP17 GP19 GP20 GP21
   <h3>5.8 Acid Walks (easter egg)</h3>
   <p>Hold <kbd>11</kbd>+<kbd>12</kbd>+<kbd>13</kbd>+<kbd>14</kbd> for 1 s: enter the hidden mode with <b>8 classic acid/house presets</b>, each with its own root, tempo, length and sound; choose with <b>pads 1–8</b>. FUNC/FX/drums still work; press the same combination again to exit.</p>
 
+  <h3>5.9 Filter SETTINGS (hidden, V5)</h3>
+  <p>On the <b>Acid screen</b>, hold <kbd>1</kbd>+<kbd>9</kbd> for 1 s: the three bars become <b>DPTH</b> (CUT; sweep depth 0–255), <b>TONE</b> (RES; high-pass brightness 110–190) and <b>SPD</b> (DCY; sweep speed 2–20, higher = slower/longer). Hold 1+9 again to exit and save to EEPROM; factory values are 90 / 170 / 5. Each pot must move before it takes over (anti-jump). These are global settings, not saved per slot. The drum screen ignores 1+9 — its bars are PCH / LEN / VOL.</p>
+
   <div class="pageno"><span>AZSMZ AD-5 — User Manual</span><span>Page 2 / 4</span></div>
 </div>
 
@@ -310,13 +314,13 @@ Pad GPIO    : top row 1-8 → GP14 GP12 GP11 GP16 GP17 GP19 GP20 GP21
 
   <h3>6.1 Entry and step editing</h3>
   <table>
-    <tr><th style="width:30mm">Current screen</th><th style="width:38mm">Press 9+10</th><th>Press 9+10+11 (hold 0.5 s)</th></tr>
+    <tr><th style="width:30mm">Current screen</th><th style="width:38mm">Hold 9+10 (0.5 s)</th><th>Hold 9+10+11 (0.5 s)</th></tr>
     <tr><td class="k">Acid</td><td>→ Drums</td><td>→ DRIFT</td></tr>
     <tr><td class="k">DRIFT</td><td>→ Drums</td><td>→ back to Acid</td></tr>
     <tr><td class="k">Drums</td><td>→ back to the last Acid/DRIFT</td><td>no action (anti-touch)</td></tr>
   </table>
   <ul>
-    <li>DRIFT <b>can only be entered from the Acid screen</b>: Drums → (9+10) → Acid → (9+10+11) → DRIFT. Switching only changes <b>what the controls edit</b>; all three engines can play together without interruption.</li>
+    <li>DRIFT <b>can only be entered from the Acid screen</b>: Drums → (hold 9+10) → Acid → (hold 9+10+11) → DRIFT. Switching only changes <b>what the controls edit</b>; all three engines can play together without interruption.</li>
     <li>On the KBRD keyboard page, <b>hold a key</b> to transpose the current sequence temporarily (release to restore).</li>
   </ul>
 
@@ -346,7 +350,7 @@ Pad GPIO    : top row 1-8 → GP14 GP12 GP11 GP16 GP17 GP19 GP20 GP21
 
   <div class="sec-c">
   <h2><span class="n">7</span>Drum machine</h2>
-  <p>Press <kbd>9</kbd>+<kbd>10</kbd> to enter/leave drum mode (from DRIFT, 9+10 also returns to the last engine).</p>
+  <p>Hold <kbd>9</kbd>+<kbd>10</kbd> for 0.5 s to enter/leave drum mode (from DRIFT, 9+10 also returns to the last engine).</p>
 
   <h3 style="margin-top:0.6mm">7.1 Eight drum voices and pattern selection</h3>
   <div class="two">
@@ -359,12 +363,12 @@ Pad GPIO    : top row 1-8 → GP14 GP12 GP11 GP16 GP17 GP19 GP20 GP21
     </table>
     <ul style="margin-top:1mm">
       <li><b>Short-press any pad (1–16) to load the matching pattern</b>; the screen shows the pattern name and number;</li>
-      <li>Pads 1–5 double as drum edit keys: short-press selects the pattern, <b>long-press enters drum edit</b>;</li>
+      <li>Pads 1–8 double as drum edit keys: hold a pad and turn a knob to edit it; a short tap also selects the matching pattern;</li>
       <li>In V5, pad 16 is also the CUSTOM pattern entry (see 7.6).</li>
     </ul>
   </div>
 
-  <h3>7.2 Per-drum editing (hold pad 1–5 and turn a knob)</h3>
+  <h3>7.2 Per-drum editing (hold pad 1–8 and turn a knob)</h3>
   <table>
     <tr><th style="width:16mm">Knob</th><th>Function</th></tr>
     <tr><td class="k">CUT</td><td>Pitch (exponential; center = original speed, 64 units = one octave)</td></tr>
@@ -372,8 +376,9 @@ Pad GPIO    : top row 1-8 → GP14 GP12 GP11 GP16 GP17 GP19 GP20 GP21
     <tr><td class="k">DCY</td><td>Volume</td></tr>
   </table>
   <ul>
-    <li>Anti-touch: a knob must move before it responds; per-drum settings <b>reset when the pattern changes</b>, but are saved with the slot; <b>Bass 2 / Clap / Open hat (pads 6–8) are not editable</b> — pattern selection only.</li>
+    <li>Anti-touch: a knob must move before it responds; per-drum settings <b>reset when the pattern changes</b>, but are saved with the slot.</li>
   </ul>
+  <p class="muted" style="font-size:6.4pt">The three bars on the drum screen show the selected drum's <b>PCH / LEN / VOL</b>; the filter bars (CUT / RES / DCY) live on the Acid screen.</p>
 
   <h3>7.3 Drum FUNC mode (press 7+8)</h3>
   <table>
@@ -425,11 +430,11 @@ Pad GPIO    : top row 1-8 → GP14 GP12 GP11 GP16 GP17 GP19 GP20 GP21
     <tr><td class="k">Short-press 16</td><td>Enter custom edit mode (no long press)</td></tr>
     <tr><td class="k">Short-press 16 while editing</td><td>Toggle the current voice on step 16</td></tr>
     <tr><td class="k">Turn any knob</td><td>Set pitch/decay/volume for the current voice in real time</td></tr>
-    <tr><td class="k">Hold 0.4 s</td><td>Switch to the next drum voice</td></tr>
-    <tr><td class="k">Hold 0.8 s</td><td>Save and exit</td></tr>
-    <tr><td class="k">Hold 2 s (any state)</td><td>Clear the whole custom pattern</td></tr>
+    <tr><td class="k">Hold 0.5–1.0 s (while editing)</td><td>Switch to the next drum voice</td></tr>
+    <tr><td class="k">Hold 1.0–1.5 s (while editing)</td><td>Save and exit</td></tr>
+    <tr><td class="k">Hold 1.5–2.0 s (any state)</td><td>Clear the whole custom pattern</td></tr>
   </table>
-  <p class="muted" style="font-size:6.4pt">While holding, a prompt bar appears at the bottom and each threshold lights in its color, so you can confirm the action before releasing.</p>
+  <p class="muted" style="font-size:6.4pt">While holding, the bottom legend lights the action that will fire on release. The four steps repeat every 2 s, so if CLEAR lights by mistake, keep holding and release on the next <b>1s=EXIT+SAVE</b> (3.0–3.5 s) to save and exit safely.</p>
 
   <h3>7.7 Drum save / load</h3>
   <p>Same as Acid: 7+8 → 3/4/5/6 loads, hold 1 s saves (<b>all three engines</b>). Per-drum settings, global FUNC (except FILT/CHNC), tempo, swing, fill and the selected pattern save with the slot; hold 3+4+5+6 for 1 s on the drum screen to clear the drum part.</p>
@@ -478,15 +483,15 @@ Pad GPIO    : top row 1-8 → GP14 GP12 GP11 GP16 GP17 GP19 GP20 GP21
   <h3 style="margin-top:0.6mm">10.1 Only ACID is audible (no drums/DRIFT)</h3>
   <p style="margin-bottom:0.6mm">Check these 4 in order:</p>
   <ol>
-    <li><b>Are the drums running?</b> → press 9+10 for drum mode, then 1+2 to start;</li>
-    <li><b>Is DRIFT on?</b> → DRIFT is off by default; press 9+10+11 (0.5 s) to switch to it;</li>
+    <li><b>Are the drums running?</b> → hold 9+10 for 0.5 s for drum mode, then 1+2 to start;</li>
+    <li><b>Is DRIFT on?</b> → DRIFT is off by default; hold 9+10+11 (0.5 s) to switch to it;</li>
     <li><b>Is the physical MIX pot at the ACID end?</b> → turn it to the middle or toward DRIFT (at the ACID end drums/DRIFT are about −17 dB, quietest);</li>
     <li><b>MIX EDIT levels</b> → hold 15+16 for MIX EDIT and turn RES and DCY up (a knob must move first).</li>
   </ol>
 
   <h3>10.2 No drums while syncing</h3>
   <ul>
-    <li>Sync uses GP8 only and <b>does not mute the drums</b>; first check that drum mode is running (9+10 → 1+2);</li>
+    <li>Sync uses GP8 only and <b>does not mute the drums</b>; first check that drum mode is running (hold 9+10, then 1+2);</li>
     <li>Check the physical MIX pot at the ACID end and whether MIX EDIT's DCY has pulled the drums down;</li>
     <li>Make sure the latest firmware is installed (section 11). (The upstream board puts the clock on GP2 and mutes the drums while syncing; the AD-5 does not.)</li>
   </ul>

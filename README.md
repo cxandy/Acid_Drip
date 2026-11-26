@@ -137,7 +137,7 @@ V5 adds a second synth voice (DRIFT), pattern chaining, per engine level mixing 
 | Pads 1+2 | Play / Stop |
 | Pads 1+2 (hold 0.5s) | Factory reset. V5 scopes this to whichever engine is currently the edit focus: acid or DRIFT. Drums have their own separate reset, hold pads 1+2 for 1s while in drum mode |
 | Pads 7+8 | Enter / exit FUNC mode |
-| Pads 9+10 | Switch to drums (from acid or DRIFT), or back to whichever of acid/DRIFT was last active (from drums) |
+| Pads 9+10 (hold 0.5s) | Switch to drums (from acid or DRIFT), or back to whichever of acid/DRIFT was last active (from drums) |
 | Pads 9+10+11 (hold 0.5s) | V5 only. From acid: go to DRIFT. From DRIFT: back to acid. From drums: no-op, see DRIFT Synth below |
 | Pads 11+12+13+14 (hold 1s) | Toggle Acid Walks easter egg |
 | Pads 12+13 | Enter / exit chain-build mode |
@@ -223,13 +223,13 @@ DRIFT is a second, independent synth voice that sits alongside the acid engine, 
 
 Which screen pads 9+10 and 9+10+11 land you on depends on where you currently are, not a fixed rule, so here is the full table:
 
-| Currently on | Pads 9+10 | Pads 9+10+11 (hold 0.5s) |
+| Currently on | Pads 9+10 (hold 0.5s) | Pads 9+10+11 (hold 0.5s) |
 |---------------|-----------|---------------------------|
 | Acid | Go to drums | Go to DRIFT |
 | DRIFT | Go to drums | Back to acid |
 | Drums | Back to whichever of acid/DRIFT was active before | No-op, stays in drums |
 
-DRIFT is only reachable from the acid screen, not directly from drums. Pressing 9+10+11 while already in drums is a deliberate no-op rather than a shortcut into DRIFT, since a three-pad press is easy to land imprecisely and jumping straight into DRIFT from drums made it too easy to end up somewhere unintended. To get from drums to DRIFT, go back to acid first (9+10), then 9+10+11.
+DRIFT is only reachable from the acid screen, not directly from drums. Holding 9+10+11 while already in drums is a deliberate no-op rather than a shortcut into DRIFT, since a three-pad press is easy to land imprecisely and jumping straight into DRIFT from drums made it too easy to end up somewhere unintended. To get from drums to DRIFT, go back to acid first (hold 9+10), then hold 9+10+11.
 
 Switching edit focus only changes which engine the pads and pots are currently controlling, not what is audible. Acid, DRIFT and drums can all be playing at once; each is started independently and the overall balance is set by the physical mix pot and MIX EDIT (see above).
 
@@ -270,7 +270,7 @@ Short-tap the REC pad (16) to start recording, tap again to stop. While recordin
 
 ## Beat Machine
 
-Switch between acid and drum mode by pressing **pads 9+10 simultaneously**. In V5, holding pads 9+10+11 instead switches to DRIFT (see DRIFT Synth above). The sequencer state is preserved when switching between any of the three.
+Switch between acid and drum mode by holding **pads 9+10** for 0.5 s. In V5, holding pads 9+10+11 instead switches to DRIFT (see DRIFT Synth above). The sequencer state is preserved when switching between any of the three.
 
 ### Drum Instruments (8 tracks)
 
