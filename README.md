@@ -399,7 +399,7 @@ The sync clock can run on **GPIO8** or **GPIO2**. The pin is picked at boot from
 
 **Boot detection selects the mode, the pin, and the direction:**
 
-- **Saved direction, or drum mode:** hold nothing at power-on. If a GP8 direction was saved, the unit comes up in that direction; if nothing was ever saved, GP2 is claimed by PWMAudio DMA and outputs drum and DRIFT audio (normal drum mode).
+- **Saved direction, or normal boot:** hold nothing at power-on. If a GP8 direction was saved, the unit comes up in that direction; if nothing was ever saved, the unit boots normally on the **Acid screen** (no sync), with GP2 claimed by PWMAudio DMA for drum and DRIFT audio.
 - **SYNC SETUP menu:** hold **pad 14** at power-on. A cyan "SYNC SETUP" screen appears with four options and the currently saved direction, then press the matching pad:
 
 | Pad | Sync pin | Direction | Use on | Remembered |
