@@ -446,7 +446,7 @@ MIX EDIT's per-engine levels (V5) are a digital trim applied on top of this, ind
 - Drum engine adapted from **DrumKid** by Matt Bradshaw  https://www.youtube.com/watch?v=509iZGjnVhM
 - Built with the [Mozzi](https://sensorium.github.io/Mozzi/) audio library
 - Original Acid Drip project and firmware by Marcus ([lonesoulsurfer](https://github.com/lonesoulsurfer))
-- Board, front panel and enclosure by AZSMZ (cxandy), drawn from scratch in JLCEDA
+- Board, PCB front panel and base plate by AZSMZ (cxandy), drawn from scratch in JLCEDA
 
 ---
 
@@ -454,7 +454,7 @@ MIX EDIT's per-engine levels (V5) are a digital trim applied on top of this, ind
 
 - **Firmware: GPL-3.0** — see [LICENSE](LICENSE). Source: https://github.com/cxandy/Acid_Drip
 - **Upstream hardware files in this repository: CERN-OHL-S-2.0** — see [LICENSE-HARDWARE](LICENSE-HARDWARE)
-- This fork's own board/panel/enclosure design is not derived from the upstream files and is not covered by CERN-OHL-S-2.0.
+- This fork's own board, PCB front panel and base plate design is not derived from the upstream files and is not covered by CERN-OHL-S-2.0.
 - "Acid Drip" is the original project's name; the licences do not grant trademark rights.
 
 Details and the modification list: [LICENSING.md](LICENSING.md) and [README.md](README.md).

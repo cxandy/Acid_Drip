@@ -50,7 +50,7 @@ The hardware files that came from upstream — the KiCad project, front panel fi
 
 You can make, change and sell boards from these files. If you share or sell a changed design, you must also share the changed design files under the same licence.
 
-**Not covered by CERN-OHL-S:** the assembled instrument sold by this fork's author uses a different board, front panel and enclosure, drawn from scratch in JLCEDA from an empty project. Those design files are not part of this repository and are not derived from the upstream KiCad or panel files. They remain the author's copyright. The upstream hardware files in this repository are kept for reference and stay under CERN-OHL-S-2.0.
+**Not covered by CERN-OHL-S:** the assembled instrument sold by this fork's author uses a different board, PCB front panel and base plate, drawn from scratch in JLCEDA from an empty project. Those design files are not part of this repository and are not derived from the upstream KiCad or panel files. They remain the author's copyright. The upstream hardware files in this repository are kept for reference and stay under CERN-OHL-S-2.0.
 
 ## Name and trademark
 
