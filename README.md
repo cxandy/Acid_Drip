@@ -72,7 +72,7 @@ Install via Arduino Library Manager:
 
 - **Mozzi** (audio synthesis engine)
 - **Adafruit GFX**
-- **Adafruit ILI9341** — the AD-5 panel is an ST7789V, driven through this library's ILI9341-compatible command set
+- **Adafruit ILI9341** — the AD-5 panel is a 2.4" ST7789V, driven through this library's ILI9341-compatible command set
 
 Board package: **Raspberry Pi Pico/RP2040** (Earle Philhower core)
 
