@@ -575,14 +575,14 @@ const uint8_t PAD_PINS[16] = {
 #define SW 320
 #define SH 240
 
-// This forces MADCTL's MY (Y-mirror) bit on top of setRotation(3)'s own
-// MADCTL value. Reason unconfirmed — possibly needed for a specific panel
-// variant with reversed row addressing, but that has NOT been verified.
-// What IS confirmed: on a standard ILI9341 panel this fights with
-// setRotation(3) and produces the wrong orientation (see repo issue #2).
-// Comment this out if your screen looks wrong after setRotation(3) with
-// it enabled.
-#define PANEL_NEEDS_Y_MIRROR
+// The AD-5 uses an ST7789V panel (320x240), driven through the
+// ILI9341-compatible command set. setRotation(3) writes its own MADCTL
+// value; on this panel that value does not give the correct orientation,
+// so it is overridden below with 0x40: MX only (reverse column order),
+// RGB order, no row/column exchange. This is the value that gives an
+// upright UI on the AD-5 panel.
+// Comment this out if your screen looks wrong after setRotation(3).
+#define PANEL_NEEDS_X_MIRROR
 
 // Colour palette (RGB565)
 #define C_BG    0x0000
@@ -6903,7 +6903,7 @@ void setup() {
 
   tft.begin(24000000);
   tft.setRotation(3);
-#ifdef PANEL_NEEDS_Y_MIRROR
+#ifdef PANEL_NEEDS_X_MIRROR
   tft.sendCommand(ILI9341_MADCTL, (uint8_t[]){0x40}, 1);
 #endif
   tft.fillScreen(C_BG);
