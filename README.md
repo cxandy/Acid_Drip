@@ -80,7 +80,7 @@ Board package: **Raspberry Pi Pico/RP2040** (Earle Philhower core)
 
 ## Files
 
-This repo has two firmware versions, each in its own folder. They are separate sketches, not meant to be merged.
+The factory AD-5 firmware is **V5** (`Firmware/Acid_Drip_Drum_Acid_Drift_V5/`). The older V4 sketch is kept for reference. The **AcidBox 303** engine port under `Firmware/Acid_Drip_V5_AcidBox/` is source-only: it is not shipped, preinstalled, or provided as a prebuilt download.
 
 ### V4 (`Acid_Drip_Drum_Acid_V4`)
 
@@ -101,7 +101,7 @@ This repo has two firmware versions, each in its own folder. They are separate s
 | `beats.h` | 16 drum patterns: 15 fixed presets plus one user editable CUSTOM slot |
 | `sample0-7.h` | Drum samples stored as int8 arrays in flash (PROGMEM) |
 
-V5 adds a second synth voice (DRIFT), pattern chaining, per engine level mixing (MIX EDIT), and a user editable custom drum pattern, all on top of everything V4 already had. Pick whichever folder matches the firmware you want to flash.
+V5 adds a second synth voice (DRIFT), pattern chaining, per engine level mixing (MIX EDIT), and a user editable custom drum pattern, all on top of everything V4 already had. The factory AD-5 image is built from this folder.
 
 ---
 
