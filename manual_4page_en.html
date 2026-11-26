@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AZSMZ AD-5 User Manual</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; background: #fff; }
+  body { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 6.95pt; line-height: 1.32; color: #1c1c1c; }
+
+  .page {
+    width: 210mm; height: 296.8mm; overflow: hidden;
+    padding: 6mm 9mm 7.5mm 9mm; position: relative;
+    page-break-after: always; background: #fff;
+  }
+  .page:last-child { page-break-after: auto; }
+  .pageno {
+    position: absolute; bottom: 3.2mm; left: 9mm; right: 9mm;
+    display: flex; justify-content: space-between;
+    font-size: 6.4pt; color: #888; border-top: 0.35mm solid #e6e6e6; padding-top: 1.2mm;
+  }
+
+  /* Hero */
+  .hero { background: #161616; color: #fff; border-radius: 2mm; padding: 3.6mm 5mm 3.2mm; margin-bottom: 3mm; display: flex; align-items: center; justify-content: space-between; gap: 4mm; }
+  .hero-main { flex: 1 1 auto; min-width: 0; }
+  .hero .t1 { font-size: 15.5pt; font-weight: 800; letter-spacing: 0.4pt; color: #d8ff2e; }
+  .hero .t2 { font-size: 8pt; color: #eee; margin-top: 0.8mm; }
+  .hero .t3 { display: flex; gap: 2mm; margin-top: 2.4mm; flex-wrap: wrap; }
+  .hero-qr { flex: 0 0 auto; display: flex; align-items: flex-start; gap: 2.4mm; }
+  .hero-qr .qr { width: 15mm; text-align: center; }
+  .hero-qr img { display: block; width: 15mm; height: 15mm; background: #fff; border-radius: 0.8mm; }
+  .hero-qr span { display: block; margin-top: 0.55mm; font-size: 5.6pt; line-height: 1.15; color: #e8e8e8; white-space: nowrap; }
+  .chip { font-size: 6.3pt; font-weight: 600; padding: 0.7mm 2.2mm; border-radius: 999px; }
+  .chip.a { background: #d8ff2e; color: #161616; }
+  .chip.b { background: #ff45c8; color: #161616; }
+  .chip.c { background: #2fd6c8; color: #161616; }
+  .chip.d { background: rgba(255,255,255,.16); color: #ddd; }
+
+  /* Sections */
+  h2 { font-size: 9.3pt; margin: 3mm 0 1.5mm; display: flex; align-items: center; gap: 2mm; }
+  h2 .n { min-width: 4.8mm; height: 4.8mm; border-radius: 1mm; color: #fff; font-size: 7.2pt; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .sec-a > h2 .n { background: #7f9900; }
+  .sec-b > h2 .n { background: #c2187e; }
+  .sec-c > h2 .n { background: #0e8f84; }
+  .sec-d > h2 .n { background: #444; }
+  h3 { font-size: 7.6pt; margin: 2mm 0 1mm; color: #333; }
+  p { margin: 0 0 1.2mm; }
+  b { font-weight: 700; }
+  .muted { color: #666; }
+  ul { margin: 0 0 1.2mm; padding-left: 4mm; }
+  li { margin-bottom: 0.4mm; }
+  ol { margin: 0 0 1.2mm; padding-left: 4mm; }
+  ol li { margin-bottom: 0.3mm; }
+  kbd { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 6.3pt; font-weight: 700; background: #f0f0f0; border: 0.22mm solid #c9c9c9; border-bottom-width: 0.55mm; border-radius: 0.9mm; padding: 0 1.1mm; white-space: nowrap; }
+  .hl { background: #fbffd6; border-radius: 0.7mm; padding: 0 0.8mm; font-weight: 700; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 0.6mm 0 1.5mm; font-size: 6.6pt; }
+  th, td { border: 0.22mm solid #d4d4d4; padding: 0.65mm 1.4mm; vertical-align: top; text-align: left; }
+  th { background: #f3f3f3; font-weight: 700; }
+  td.k { white-space: nowrap; font-weight: 700; }
+  tr:nth-child(even) td { background: #fafafa; }
+
+  /* Callouts */
+  .warn { background: #fff6d9; border-left: 1.1mm solid #d9a400; padding: 1.1mm 2mm; border-radius: 0 1mm 1mm 0; margin: 0.8mm 0 1.5mm; font-size: 6.7pt; }
+  .note { background: #eef6ff; border-left: 1.1mm solid #4a86c8; padding: 1.1mm 2mm; border-radius: 0 1mm 1mm 0; margin: 0.8mm 0 1.5mm; font-size: 6.7pt; }
+  .tip  { background: #eff8ee; border-left: 1.1mm solid #5a8a4a; padding: 1.1mm 2mm; border-radius: 0 1mm 1mm 0; margin: 0.8mm 0 1.5mm; font-size: 6.7pt; }
+
+  pre { font-family: Consolas, "Courier New", monospace; font-size: 6pt; line-height: 1.42; background: #f6f6f6; border: 0.22mm solid #ddd; border-radius: 1.2mm; padding: 1.6mm 2.4mm; margin: 0.6mm 0 1.5mm; white-space: pre; color: #222; }
+
+  /* Pad grid diagram */
+  .padgrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 1mm; margin: 1mm 0 0.8mm; }
+  .pad { border: 0.3mm solid #bbb; border-radius: 1.2mm; text-align: center; padding: 0.9mm 0 0.8mm; background: #fdfdfd; }
+  .pad .num { font-size: 7.3pt; font-weight: 800; }
+  .pad .lab { font-size: 5.6pt; color: #555; line-height: 1.2; }
+  .pad.top .num { color: #7f9900; }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 4mm; align-items: start; }
+  .compact { font-size: 6.45pt; line-height: 1.16; }
+  .compact table { font-size: 5.85pt; margin: 0.3mm 0 0.9mm; line-height: 1.16; }
+  .compact th, .compact td { padding: 0.36mm 1.05mm; }
+  .compact h2 { font-size: 8.6pt; margin: 1.4mm 0 0.75mm; }
+  .compact h3 { font-size: 6.9pt; margin: 0.85mm 0 0.42mm; }
+  .compact p, .compact ul, .compact ol { margin-bottom: 0.8mm; }
+  .compact li { margin-bottom: 0.2mm; }
+  .compact .warn, .compact .note, .compact .tip { font-size: 6.2pt; padding: 0.9mm 1.8mm; margin: 0.6mm 0 1.1mm; }
+  .compact pre { font-size: 5.6pt; }
+  .compact .two { gap: 0 3mm; }
+  .lite { font-size: 7.1pt; line-height: 1.28; }
+  .lite h2 { margin: 2mm 0 1.2mm; }
+  .lite h3 { font-size: 7.8pt; margin: 1.6mm 0 0.8mm; }
+  .lite table { font-size: 6.75pt; margin: 0.6mm 0 1.5mm; }
+  .lite th, .lite td { padding: 0.6mm 1.3mm; }
+  .lite .warn, .lite .note, .lite .tip { font-size: 6.95pt; padding: 1.1mm 2mm; }
+  .lite pre { font-size: 6.2pt; }
+  .lite p, .lite ul, .lite ol { margin-bottom: 0.95mm; }
+  .p4 { font-size: 6.45pt; line-height: 1.18; }
+  .p4 table { font-size: 5.9pt; margin: 0.35mm 0 1mm; }
+  .p4 th, .p4 td { padding: 0.4mm 1.1mm; }
+  .p4 h2 { font-size: 8.7pt; margin: 1.7mm 0 0.85mm; }
+  .p4 h3 { font-size: 7pt; margin: 1.1mm 0 0.55mm; }
+  .p4 p, .p4 ul, .p4 ol { margin-bottom: 0.95mm; }
+  .p4 li { margin-bottom: 0.3mm; }
+  .p4 .warn, .p4 .note, .p4 .tip { font-size: 6.3pt; padding: 1mm 1.9mm; margin: 0.7mm 0 1.1mm; }
+  .p4 pre { font-size: 5.9pt; }
+  .gallery { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2.4mm; margin: 1.2mm 0 0; }
+  .gallery figure { margin: 0; }
+  .gallery img { height: 38mm; width: auto; max-width: 100%; border-radius: 1.6mm; border: 0.3mm solid #ddd; display: block; margin: 0 auto; }
+  .gallery figcaption { font-size: 5.8pt; color: #666; text-align: center; margin-top: 0.9mm; }
+  .kv th { white-space: nowrap; }
+  .toc { display: flex; gap: 1.6mm; flex-wrap: wrap; margin: 0 0 1mm; }
+  .toc span { font-size: 6.2pt; color: #555; background: #f4f4f4; border-radius: 999px; padding: 0.6mm 2mm; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================= Page 1 -->
+<div class="page lite">
+  <div class="hero">
+    <div class="hero-main">
+      <div class="t1">AZSMZ AD-5 User Manual</div>
+      <div class="t2">Three engines, one instrument: acid bass synth (Acid) + DRIFT synth + drum machine</div>
+      <div class="t3">
+        <span class="chip a">Acid</span><span class="chip b">DRIFT voice</span><span class="chip c">Drum machine</span>
+        <span class="chip d">AZSMZ custom board · Sync GP8 · RP2040 · Firmware v1.0.0</span>
+      </div>
+    </div>
+    <div class="hero-qr">
+      <div class="qr"><img src="manual_assets/qr-project.png" alt="Open source project QR"><span>Open source</span></div>
+      <div class="qr"><img src="manual_assets/qr-ebay.png" alt="eBay store QR"><span>eBay store</span></div>
+      <div class="qr"><img src="manual_assets/qr-tindie.png" alt="Tindie store QR"><span>Tindie store</span></div>
+    </div>
+  </div>
+
+  <div class="gallery">
+    <figure><img src="photos/product_2.jpg" alt="AZSMZ AD-5 top view"><figcaption>Top: drum machine, FUNKY pattern</figcaption></figure>
+    <figure><img src="photos/product_3.jpg" alt="AZSMZ AD-5 angle detail"><figcaption>Angle: FUNKY screen, AUDIO / SYNC</figcaption></figure>
+    <figure><img src="photos/product_1.jpg" alt="AZSMZ AD-5 front"><figcaption>Front: TFT / 16 pads / four knobs</figcaption></figure>
+  </div>
+
+  <div class="toc"><span>① Intro</span><span>② Panel</span><span>③ Wiring</span><span>④ Boot &amp; modes</span><span>⑤ Acid</span><span>⑥ DRIFT</span><span>⑦ Drums</span><span>⑧ Sync</span><span>⑨ Reset</span><span>⑩ Troubleshooting</span><span>⑪ Flashing</span><span>⑫ Specs</span></div>
+
+  <div class="sec-a">
+  <h2 style="margin-top:0"><span class="n">1</span>Introduction</h2>
+  <p><b>AZSMZ AD-5</b> is a dual-core, three-in-one instrument built on <b>RP2040 (Raspberry Pi Pico)</b> with the <b>Mozzi audio library</b>: a 16-step classic 303-style acid bass sequencer, a second independent synth voice <b>DRIFT</b> (16 engines, its own pattern), and an 8-voice drum machine with 16 preset patterns plus one user-editable pattern. <b>All three engines can play at once</b>, each with independent start/stop; the mix is set by the <b>physical MIX Balance pot</b> plus <b>MIX EDIT digital trim</b>. The hardware is an original AZSMZ design; the firmware is a GPL-3.0 modified version of Acid Drip. Power is <b>USB-C 5 V</b>; there is <b>no internal battery</b> — unplug to power off.</p>
+  <table>
+    <tr><th style="width:26mm">Part</th><th>Description</th><th style="width:22mm">Hardware</th><th style="width:56mm">Spec</th></tr>
+    <tr><td>Acid bass synth</td><td>16-step acid sequencer, classic 303 style</td><td>MCU</td><td>RP2040 dual-core (Pico)</td></tr>
+    <tr><td>DRIFT synth</td><td>Second independent voice, 16 engines</td><td>Display</td><td>ILI9341 320×240 TFT</td></tr>
+    <tr><td>Drum machine</td><td>16 presets + 1 user pattern, 8 voices</td><td>Pads</td><td>16× Cherry MX (2 rows × 8)</td></tr>
+    <tr><td>Three engines at once</td><td>Independent start/stop, drift-free sync</td><td>Knobs</td><td>4× 10K (CUT / RES / DCY analog, MIX balance)</td></tr>
+  </table>
+  <div class="note"><b>Factory firmware</b> <span class="muted">Firmware/Acid_Drip_Drum_Acid_Drift_V5/</span> — the original acid engine (Badass Bass derivative); CUT / RES / DCY act directly on the acid filter.<br>
+  The <b>AcidBox 303 port</b> is kept as source only (<span class="muted">Firmware/Acid_Drip_V5_AcidBox/</span>); it is not shipped with the instrument.</div>
+
+  <h2><span class="n">2</span>Panel layout</h2>
+  <div class="padgrid">
+    <div class="pad top"><div class="num">1</div><div class="lab">Step 1</div></div>
+    <div class="pad top"><div class="num">2</div><div class="lab">Step 2</div></div>
+    <div class="pad top"><div class="num">3</div><div class="lab">Step 3</div></div>
+    <div class="pad top"><div class="num">4</div><div class="lab">Step 4</div></div>
+    <div class="pad top"><div class="num">5</div><div class="lab">Step 5</div></div>
+    <div class="pad top"><div class="num">6</div><div class="lab">Step 6</div></div>
+    <div class="pad top"><div class="num">7</div><div class="lab">Step 7</div></div>
+    <div class="pad top"><div class="num">8</div><div class="lab">Step 8</div></div>
+    <div class="pad"><div class="num">9</div><div class="lab">KEY</div></div>
+    <div class="pad"><div class="num">10</div><div class="lab">RIFF</div></div>
+    <div class="pad"><div class="num">11</div><div class="lab">SOUND</div></div>
+    <div class="pad"><div class="num">12</div><div class="lab">WALK</div></div>
+    <div class="pad"><div class="num">13</div><div class="lab">FX</div></div>
+    <div class="pad"><div class="num">14</div><div class="lab">TEMPO</div></div>
+    <div class="pad"><div class="num">15</div><div class="lab">P-LEN</div></div>
+    <div class="pad"><div class="num">16</div><div class="lab">NOTE</div></div>
+  </div>
+  <p class="muted" style="font-size:6.4pt">Top row = steps 1–8; bottom row = steps 9–16, printed with their FUNC-mode names. The top row is also labeled: pad 1 START / STOP, pads 3–4 SAVE / LOAD, pads 7–8 FUNCTION A / B. Pad 16 is printed NOTE; the screen shows <b>PAT&gt;</b> (playback order).</p>
+
+  <h2><span class="n">3</span>Hardware wiring (AZSMZ AD-5)</h2>
+  <pre>Display TFT : SCK=GP6  SDA=GP7  RST=<b>3V3</b>  DC=GP10  CS=GP13   (AZSMZ board: RST to 3V3, GP8 for sync)
+Knobs       : CUT=GP26  RES=GP28  DCY=GP27   (MIX Balance is analog, not ADC)
+Sync        : IN/OUT=GP8 → SYNC jack (see sections 4 and 8)
+Audio       : Acid=GP15  Drums+DRIFT=GP2 → MIX Balance → shared AUDIO jack
+Pad GPIO    : top row 1-8 → GP14 GP12 GP11 GP16 GP17 GP19 GP20 GP21
+              bottom row 9-16 → GP0 GP1 GP3 GP4 GP5 GP9 GP18 GP22   (pad 14 = GPIO9)</pre>
+  <table>
+    <tr><th style="width:44mm">Signal / pin</th><th>Output path</th></tr>
+    <tr><td class="k">Acid → GP15</td><td>10K series into the node; 10nF + 3.3K to ground; 10µF DC block → AUDIO jack (details in 12.1)</td></tr>
+    <tr><td class="k">Drums + DRIFT → GP2</td><td>Through the MIX Balance pot (10K) into the same node; DRIFT and drums mix additively</td></tr>
+    <tr><td class="k">Sync → GP8</td><td>Dedicated sync jack; choose input/output direction in the boot menu (section 8)</td></tr>
+  </table>
+  <div class="warn"><b>With the physical MIX pot at the “ACID” end, drums and DRIFT are at their quietest</b>: about −17 dB, but <b>they never disappear</b> (the 4.7K floor is intentional). This is normal; turn away from the ACID end to bring drums/DRIFT forward. MIX EDIT is only a digital trim and cannot replace the physical balance.</div>
+
+  <h2><span class="n">4</span>Boot and mode selection</h2>
+  <p>The boot gesture selects the mode and sync direction (<b>the pad 1/2 direction is stored in EEPROM and restored on every boot</b>): <b>hold nothing</b> = the last saved sync direction (if none was saved: drum mode, with drums + DRIFT audio on GP2); <b>hold <kbd>pad 14</kbd> while powering on</b> = the cyan <b>SYNC SETUP</b> menu appears; press <b>pad 1</b> or <b>pad 2</b> to choose the direction.</p>
+  <table>
+    <tr><th style="width:13mm">Pad</th><th style="width:24mm">Direction</th><th>Description</th></tr>
+    <tr><td class="k">pad 1</td><td>Sync in</td><td>External clock drives the unit; while playing, the top right shows <b>SYNC IN (cyan)</b></td></tr>
+    <tr><td class="k">pad 2</td><td>Sync out</td><td>The unit is the master clock and sends pulses; while playing, <b>SYNC OUT (magenta)</b></td></tr>
+  </table>
+  <div class="warn">Sync input and output <b>share one jack; only one direction at a time</b>. The pad 1/2 choice is <b>stored in EEPROM</b> and restored on the next boot; hold pad 14 to change it. Sync uses <b>GP8 only</b>, so drums and DRIFT are unaffected.</div>
+
+  <div class="note"><b>Differences from the upstream board</b> — same pinout, own circuit:
+  <ul style="margin-bottom:0">
+    <li><b>Sync on GP8</b>: LCD RST ties to 3V3, so GP8 is free. Unlike upstream, drums stay audible while syncing.</li>
+    <li><b>Boot menu</b>: SYNC SETUP (pad 14 at boot, pad 1/2 = in/out, remembered); upstream uses an SPDT switch.</li>
+    <li><b>Other</b>: MADCTL 0x40 display fix; both boards supported; 303 variant is source-only (section 1).</li>
+  </ul></div>
+  </div>
+
+  <div class="pageno"><span>AZSMZ AD-5 — User Manual</span><span>Page 1 / 4</span></div>
+</div>
+
+<!-- ============================================================= Page 2 -->
+<div class="page sec-a lite">
+  <h2 style="margin-top:0"><span class="n">5</span>Acid synth</h2>
+
+  <h3>5.1 Step editing</h3>
+  <table>
+    <tr><th style="width:55mm">Action</th><th>Result</th></tr>
+    <tr><td class="k">Short-press a step pad (1–16)</td><td>Toggle the step on/off</td></tr>
+    <tr><td class="k">Long-press ×1</td><td>Toggle accent</td></tr>
+    <tr><td class="k">Long-press ×2</td><td>Toggle glide</td></tr>
+    <tr><td class="k">Hold a step pad + turn CUT</td><td>Set that step's pitch (scale-quantized)</td></tr>
+  </table>
+
+  <h3>5.2 Core combinations</h3>
+  <table>
+    <tr><th style="width:48mm">Combination</th><th>Function</th></tr>
+    <tr><td class="k"><kbd>1</kbd>+<kbd>2</kbd></td><td>Play / stop</td></tr>
+    <tr><td class="k"><kbd>1</kbd>+<kbd>2</kbd> (hold 0.5 s)</td><td>Factory reset the current engine (Acid or DRIFT); in drum mode, hold 1 s to reset the drums</td></tr>
+    <tr><td class="k"><kbd>7</kbd>+<kbd>8</kbd></td><td>Enter / leave FUNC mode</td></tr>
+    <tr><td class="k"><kbd>9</kbd>+<kbd>10</kbd></td><td>Switch to drums (or back to Acid/DRIFT)</td></tr>
+    <tr><td class="k"><kbd>9</kbd>+<kbd>10</kbd>+<kbd>11</kbd> (0.5 s)</td><td>Acid ↔ DRIFT (V5)</td></tr>
+    <tr><td class="k"><kbd>11</kbd>+<kbd>12</kbd>+<kbd>13</kbd>+<kbd>14</kbd> (1 s)</td><td>Toggle the Acid Walks easter egg</td></tr>
+    <tr><td class="k"><kbd>12</kbd>+<kbd>13</kbd></td><td>Enter / leave chain-build mode</td></tr>
+    <tr><td class="k"><kbd>15</kbd>+<kbd>16</kbd> (1 s)</td><td>Toggle MIX EDIT mode</td></tr>
+  </table>
+
+  <h3>5.3 Save / load (hold 7+8 for the save screen)</h3>
+  <table>
+    <tr><th style="width:55mm">Action</th><th>Function</th></tr>
+    <tr><td class="k">Press <kbd>3</kbd>/<kbd>4</kbd>/<kbd>5</kbd>/<kbd>6</kbd></td><td>Load slot 1/2/3/4</td></tr>
+    <tr><td class="k">Hold 3/4/5/6 for 1 s</td><td>Save to slot 1/2/3/4</td></tr>
+    <tr><td class="k">Hold <kbd>3</kbd>+<kbd>4</kbd>+<kbd>5</kbd>+<kbd>6</kbd> for 1 s</td><td>Clear all 4 slots (Acid screen: acid part; drum screen: drum part)</td></tr>
+  </table>
+  <ul>
+    <li>Slot status is shown at the top right (left of the SYNC indicator): <b>yellow dot = saved, grey dot = empty</b>.</li>
+    <li><b>In V5 each slot saves all three engines together</b> (Acid + DRIFT + drums), including each engine's play/stop state.</li>
+    <li>If an engine had no data when saved, loading leaves it as-is; loading an empty slot only shows a message and loads nothing.</li>
+  </ul>
+
+  <h3>5.4 Pattern chaining (V5)</h3>
+  <p>Chain the 4 save slots into a sequence of up to <b>16 segments</b>, in any order, with repeats:</p>
+  <ol>
+    <li>Press <kbd>12</kbd>+<kbd>13</kbd> to enter chain edit;</li>
+    <li>Press 3/4/5/6 to append that slot; <b>press again to repeat</b> (e.g. 3, 3, 4 → slot 1 ×2 + slot 2);</li>
+    <li>Press <kbd>12</kbd>+<kbd>13</kbd> again to exit and <b>start playback automatically</b>.</li>
+  </ol>
+  <ul>
+    <li>Each segment plays one full pass at the slot's saved length, then the next; after the last segment it loops to the first.</li>
+    <li>Press 7+8 (FUNC) to cancel; while playing, <b>“CH”</b> appears next to the slot indicator. Chaining is Acid-only and <b>not stored in EEPROM</b> (lost on power-off).</li>
+  </ul>
+
+  <h3>5.5 FUNC mode (press 7+8)</h3>
+  <table>
+    <tr><th style="width:10mm">Key</th><th style="width:38mm">Function</th><th>Options</th></tr>
+    <tr><td class="k">9</td><td>KEY root</td><td>C / D / Eb / F / G / Ab / Bb / B</td></tr>
+    <tr><td class="k">10</td><td>RIFF preset</td><td>DFLT / SQNCE / FUNK / MINI / JUMP / RAVE / SYNC / DARK</td></tr>
+    <tr><td class="k">11</td><td>SOUND</td><td>SAW / SQR / SINE / PWM / CSAW / CSQR / CSIN / SUBSQ</td></tr>
+    <tr><td class="k">12</td><td>WALK interval walk</td><td>OFF / 4TH / OCTWAVE / 5TH / BOUNCE / MIN3RD / VAMP3 / RANDOM</td></tr>
+    <tr><td class="k">13</td><td>FX assignment</td><td>Enter FX sub-mode (5.6)</td></tr>
+    <tr><td class="k">14</td><td>TEMPO</td><td>Preset BPM: 100/110/120/128/133/138/145/160; <b>tap repeatedly to tap tempo</b></td></tr>
+    <tr><td class="k">15</td><td>P-LEN pattern length</td><td>1 / 2 / 3 / 4 / 6 / 8 / 12 / 16</td></tr>
+    <tr><td class="k">16</td><td>NOTE playback order <span class="muted">(screen PAT&gt;)</span></td><td>FWD / CW / ALT / REV / SKIP2 / SKIP3 / PING / RND</td></tr>
+  </table>
+
+  <h3>5.6 FX assignment (FUNC → press 13)</h3>
+  <ol>
+    <li>Press a top-row pad to select an effect: <span class="hl">None / Oct Up / Retrigger / Stutter / Maj Step / Min Step / Dom7 / Dim Step</span>;</li>
+    <li>Press any step pad (1–16) to assign the effect to that step; press the selected effect pad again to deselect;</li>
+    <li><b>Hold step 1</b> to clear all step effects; press 7+8 to return.</li>
+  </ol>
+
+  <h3>5.7 MIX EDIT (V5, hold 15+16 for 1 s)</h3>
+  <div class="two">
+    <table style="margin-top:0.4mm">
+      <tr><th style="width:14mm">Knob</th><th>Controls</th></tr>
+      <tr><td class="k">CUT</td><td>Acid</td></tr>
+      <tr><td class="k">RES</td><td>DRIFT</td></tr>
+      <tr><td class="k">DCY</td><td>Drums</td></tr>
+    </table>
+    <ul style="margin-top:1mm">
+      <li><b>Digital trim</b> on top of the physical pots; the physical pot only blends “Acid vs drums+DRIFT”, while MIX EDIT can balance DRIFT separately;</li>
+      <li><b>Anti-touch</b>: a knob must move before it takes effect, so the page does not jump on entry; press 15+16 again to exit; the three levels are <b>saved to EEPROM automatically</b>.</li>
+    </ul>
+  </div>
+  <p class="muted" style="font-size:6.6pt">V4's Accent Edit is replaced by MIX EDIT; the accent sound is now fixed.</p>
+
+  <h3>5.8 Acid Walks (easter egg)</h3>
+  <p>Hold <kbd>11</kbd>+<kbd>12</kbd>+<kbd>13</kbd>+<kbd>14</kbd> for 1 s: enter the hidden mode with <b>8 classic acid/house presets</b>, each with its own root, tempo, length and sound; choose with <b>pads 1–8</b>. FUNC/FX/drums still work; press the same combination again to exit.</p>
+
+  <div class="pageno"><span>AZSMZ AD-5 — User Manual</span><span>Page 2 / 4</span></div>
+</div>
+
+<!-- ============================================================= Page 3 -->
+<div class="page compact">
+  <div class="sec-b">
+  <h2 style="margin-top:0"><span class="n">6</span>DRIFT synth (V5)</h2>
+  <p>An independent second voice: <b>its own 16-step pattern, 16 engines, and its own FUNC page</b>. Its digital output is mixed with the drums on GP2; turn the <b>MIX Balance away from the ACID end</b> to hear it clearly.</p>
+
+  <h3>6.1 Entry and step editing</h3>
+  <table>
+    <tr><th style="width:30mm">Current screen</th><th style="width:38mm">Press 9+10</th><th>Press 9+10+11 (hold 0.5 s)</th></tr>
+    <tr><td class="k">Acid</td><td>→ Drums</td><td>→ DRIFT</td></tr>
+    <tr><td class="k">DRIFT</td><td>→ Drums</td><td>→ back to Acid</td></tr>
+    <tr><td class="k">Drums</td><td>→ back to the last Acid/DRIFT</td><td>no action (anti-touch)</td></tr>
+  </table>
+  <ul>
+    <li>DRIFT <b>can only be entered from the Acid screen</b>: Drums → (9+10) → Acid → (9+10+11) → DRIFT. Switching only changes <b>what the controls edit</b>; all three engines can play together without interruption.</li>
+    <li>On the KBRD keyboard page, <b>hold a key</b> to transpose the current sequence temporarily (release to restore).</li>
+  </ul>
+
+  <h3>6.2 FUNC mode (press 7+8 on the DRIFT screen)</h3>
+  <table>
+    <tr><th style="width:10mm">Key</th><th style="width:33mm">Function</th><th>Options</th></tr>
+    <tr><td class="k">9</td><td>SND1 engine (page 1)</td><td>SUBSIN / DTSQR / FMBEL / RINGM / CLICK / FOLDR / PWM / UNISN</td></tr>
+    <tr><td class="k">10</td><td>SND2 engine (page 2)</td><td>SAW / SUBDIV / NOIZ / VOWEL / ARPG / GONG / CRUSH / GATE</td></tr>
+    <tr><td class="k">11</td><td>FOLW pitch mode</td><td>F+8 / F-8 / F+5 / F+3 (follow the last acid note + interval) / FOLW / ARP+ / AR+- / WALK</td></tr>
+    <tr><td class="k">12</td><td>ECHO delay</td><td>OFF / 8D / 1/4 / 4D / 1/2 / 8FB / 4FB / 2FB</td></tr>
+    <tr><td class="k">13</td><td>VERB reverb</td><td>OFF / SML / MED / BIG / HALL / MEDW / BIGW / WASH</td></tr>
+    <tr><td class="k">14</td><td>PATT pattern save</td><td>8 user slots S1–S8</td></tr>
+    <tr><td class="k">15</td><td>EVOL generative evolution</td><td>OFF / OCTL / ADD1 / DEEP / STUT / HVY / WILD / MAX</td></tr>
+    <tr><td class="k">16</td><td>REC knob-motion recording</td><td>see 6.4</td></tr>
+  </table>
+  <p class="muted" style="font-size:6.2pt">The 16 engines map CUT/RES/DCY differently (roughly octave, character/detune, decay time); the knobs change role with the engine.</p>
+
+  <h3>6.3 PATT and EVOLVE</h3>
+  <ul>
+    <li><b>PATT</b>: 8 slots (S1–S8) save DRIFT's own step pattern (on/off steps only; pitch comes from FOLW). Press = load, hold = save; all empty initially.</li>
+    <li><b>EVOLVE (EVOL)</b>: generative variation with 7 levels (OCTL gentlest → MAX most aggressive); it periodically takes the DRIFT sequence away from the recorded pattern and brings it back; the level sets how far and how often.</li>
+  </ul>
+
+  <h3>6.4 REC knob-motion recording</h3>
+  <p><b>Short-press 16</b> to start recording, short-press again to stop. While recording, turning any knob activates that lane and <b>records one loop, beat by beat</b>; after stopping, the motion plays back automatically each step. Unrecorded knobs remain live. <b>Long-press 16</b> clears all recordings.</p>
+  </div>
+
+  <div class="sec-c">
+  <h2><span class="n">7</span>Drum machine</h2>
+  <p>Press <kbd>9</kbd>+<kbd>10</kbd> to enter/leave drum mode (from DRIFT, 9+10 also returns to the last engine).</p>
+
+  <h3 style="margin-top:0.6mm">7.1 Eight drum voices and pattern selection</h3>
+  <div class="two">
+    <table style="margin-top:0.4mm">
+      <tr><th style="width:9mm">Pad</th><th>Voice</th><th style="width:9mm">Pad</th><th>Voice</th></tr>
+      <tr><td class="k">1</td><td>Kick</td><td class="k">5</td><td>Rim / Tom</td></tr>
+      <tr><td class="k">2</td><td>Closed hat</td><td class="k">6</td><td>Bass 2</td></tr>
+      <tr><td class="k">3</td><td>Snare</td><td class="k">7</td><td>Clap</td></tr>
+      <tr><td class="k">4</td><td>Rim</td><td class="k">8</td><td>Open hat</td></tr>
+    </table>
+    <ul style="margin-top:1mm">
+      <li><b>Short-press any pad (1–16) to load the matching pattern</b>; the screen shows the pattern name and number;</li>
+      <li>Pads 1–5 double as drum edit keys: short-press selects the pattern, <b>long-press enters drum edit</b>;</li>
+      <li>In V5, pad 16 is also the CUSTOM pattern entry (see 7.6).</li>
+    </ul>
+  </div>
+
+  <h3>7.2 Per-drum editing (hold pad 1–5 and turn a knob)</h3>
+  <table>
+    <tr><th style="width:16mm">Knob</th><th>Function</th></tr>
+    <tr><td class="k">CUT</td><td>Pitch (exponential; center = original speed, 64 units = one octave)</td></tr>
+    <tr><td class="k">RES</td><td>Decay length (4 ms click to full sample tail)</td></tr>
+    <tr><td class="k">DCY</td><td>Volume</td></tr>
+  </table>
+  <ul>
+    <li>Anti-touch: a knob must move before it responds; per-drum settings <b>reset when the pattern changes</b>, but are saved with the slot; <b>Bass 2 / Clap / Open hat (pads 6–8) are not editable</b> — pattern selection only.</li>
+  </ul>
+
+  <h3>7.3 Drum FUNC mode (press 7+8)</h3>
+  <table>
+    <tr><th style="width:14mm">Label</th><th style="width:26mm">Function</th><th>Description</th></tr>
+    <tr><td class="k">PTCH</td><td>Global pitch</td><td>Transposes everything, on top of per-drum pitch</td></tr>
+    <tr><td class="k">DRIV</td><td>Drive/saturation</td><td>Exponential pre-gain into a hard-knee saturator; at the top it adds <b>bit crush</b></td></tr>
+    <tr><td class="k">FILT</td><td>Bipolar DJ filter</td><td>Center = bypass; below center = low-pass sweep; above = high-pass sweep</td></tr>
+    <tr><td class="k">CHNC</td><td>Random chance</td><td>Center = as programmed; low = thin out hits (keeps the backbone); high = add ghost notes to empty steps</td></tr>
+    <tr><td class="k">HMNZ</td><td>Humanize</td><td>Random velocity jitter + per-hit timing offset; center = mechanical</td></tr>
+    <tr><td class="k">SWNG</td><td>Swing</td><td>Delays odd 16th notes by up to 60% of the step interval</td></tr>
+    <tr><td class="k">ACNT</td><td>Accent depth</td><td>Center = flat; high = accent downbeats; low = accent offbeats (late)</td></tr>
+    <tr><td class="k">FILL</td><td>Programmed fill</td><td>see 7.4</td></tr>
+  </table>
+  <p class="muted" style="font-size:6.4pt">Except FILT and CHNC, all FUNC parameters are saved with the slot.</p>
+
+  <h3>7.4 Fill engine (FUNC → FILL)</h3>
+  <p style="margin-bottom:0.6mm">The last few beats before a section end are taken over by a generated “push” that lands on beat 1 with kick + open hat. <b>Pads 1–4 set the frequency, pads 5–8 the type:</b></p>
+  <div class="two">
+    <table style="margin-top:0.4mm">
+      <tr><th style="width:8mm">Pad</th><th>Frequency</th></tr>
+      <tr><td class="k">1</td><td>OFF</td></tr>
+      <tr><td class="k">2</td><td>Every 16 steps (4-step length)</td></tr>
+      <tr><td class="k">3</td><td>Every 32 steps (6-step length)</td></tr>
+      <tr><td class="k">4</td><td>Every 64 steps (8-step length = half bar)</td></tr>
+    </table>
+    <table style="margin-top:0.4mm">
+      <tr><th style="width:8mm">Pad</th><th>Type / behavior</th></tr>
+      <tr><td class="k">5</td><td>HATS: closed hats get denser and open up, ending on open hat; kick stays solid</td></tr>
+      <tr><td class="k">6</td><td>CLAP: clap build + steady half-time kick</td></tr>
+      <tr><td class="k">7</td><td>SNARE: pure snare rolls, no kick, heavy final hit</td></tr>
+      <tr><td class="k">8</td><td>KIT: toms descending to snare for the first 70%; clap on beat “1”</td></tr>
+    </table>
+  </div>
+  <ul style="margin-top:0">
+    <li>Fill sounds are adjustable: the three knobs edit pitch/decay/volume inside the FILL slot (saved with it); density accelerates toward the landing and adds 32nd-note midpoints at the end. Pads 7/8 are also the FUNC exit combination, so the choice is confirmed on release.</li>
+  </ul>
+
+  <h3>7.5 Sixteen patterns</h3>
+  <table style="font-size:6.1pt">
+    <tr><td class="k">1</td><td>BASC · BASIC</td><td class="k">4</td><td>ACID · ACID TRACK</td><td class="k">7</td><td>SWNG · SWING</td><td class="k">10</td><td>LATN · LATIN</td><td class="k">13</td><td>DNBT · DRUM N BASS</td></tr>
+    <tr><td class="k">2</td><td>HOUS · HOUSE</td><td class="k">5</td><td>HSOC · HI STATE</td><td class="k">8</td><td>BKBT · BREAKBEAT</td><td class="k">11</td><td>PCFC · PACIFIC ST</td><td class="k">14</td><td>VOOD · VOODOO RAY</td></tr>
+    <tr><td class="k">3</td><td>TECH · TECHNO</td><td class="k">6</td><td>FUNK · FUNKY</td><td class="k">9</td><td>MINM · MINIMAL</td><td class="k">12</td><td>BLMN · BLUE MONDAY</td><td class="k">15</td><td>GBLD · BUILD DOWN</td></tr>
+    <tr><td class="k">16</td><td colspan="9">CUST · <b>CUSTOM (user)</b> — see 7.6</td></tr>
+  </table>
+
+  <h3>7.6 CUSTOM pattern (pad 16, V5)</h3>
+  <table>
+    <tr><th style="width:42mm">Action</th><th>Function</th></tr>
+    <tr><td class="k">Short-press 16</td><td>Enter custom edit mode (no long press)</td></tr>
+    <tr><td class="k">Short-press 16 while editing</td><td>Toggle the current voice on step 16</td></tr>
+    <tr><td class="k">Turn any knob</td><td>Set pitch/decay/volume for the current voice in real time</td></tr>
+    <tr><td class="k">Hold 0.4 s</td><td>Switch to the next drum voice</td></tr>
+    <tr><td class="k">Hold 0.8 s</td><td>Save and exit</td></tr>
+    <tr><td class="k">Hold 2 s (any state)</td><td>Clear the whole custom pattern</td></tr>
+  </table>
+  <p class="muted" style="font-size:6.4pt">While holding, a prompt bar appears at the bottom and each threshold lights in its color, so you can confirm the action before releasing.</p>
+
+  <h3>7.7 Drum save / load</h3>
+  <p>Same as Acid: 7+8 → 3/4/5/6 loads, hold 1 s saves (<b>all three engines</b>). Per-drum settings, global FUNC (except FILT/CHNC), tempo, swing, fill and the selected pattern save with the slot; hold 3+4+5+6 for 1 s on the drum screen to clear the drum part.</p>
+  </div>
+
+  <div class="pageno"><span>AZSMZ AD-5 — User Manual</span><span>Page 3 / 4</span></div>
+</div>
+
+<!-- ============================================================= Page 4 -->
+<div class="page compact p4">
+  <div class="sec-d">
+  <h2 style="margin-top:0"><span class="n">8</span>Sync modes</h2>
+  <p>Sync uses the dedicated <b>GP8</b> pin (LCD RST is tied to 3V3, so GP8 is free for sync): <b>choose the direction in the boot menu</b>; the pad 1/2 choice is <b>stored in EEPROM</b> and restored on every boot. Input and output share one jack; only one direction at a time.</p>
+
+  <div class="warn">The unit connects <b>only GP8</b> to the sync jack. <b>Pads 3/4 are for the upstream PCB only — do not select them on the AD-5</b>: they route the clock onto the drum/DRIFT audio, mute the drums, and clear the remembered direction. If selected by mistake, power off and hold pad 14 while powering on, then choose pad 1/2.</div>
+
+  <h3>8.1 Sync in (external clock → unit)</h3>
+  <ol>
+    <li>With the unit off, <b>hold pad 14 and power on</b> (first setup or to change direction);</li>
+    <li>In the SYNC SETUP menu, press <b>pad 1</b> (sync in);</li>
+    <li>Connect the external clock source (drum machine / sequencer DIN sync out) to the sync jack;</li>
+    <li>The unit follows the external clock; <b>SYNC IN is cyan</b> at the top right.</li>
+  </ol>
+
+  <h3>8.2 Sync out (unit → external gear)</h3>
+  <ol>
+    <li>Hold pad 14 while powering on → press <b>pad 2</b> (sync out); it is remembered on later boots;</li>
+    <li>Sends a <b>1 pulse per beat (1 PPQN)</b> DIN-style sync stream as master clock for other gear;</li>
+    <li><b>SYNC OUT is magenta</b> at the top right.</li>
+  </ol>
+  <ul>
+    <li><b>Any running engine sends pulses</b> (Acid 1+2, DRIFT or drums alone); with everything stopped the output stays low;</li>
+    <li>Pulse width is fixed at <b>15 ms</b>, independent of tempo; input and output share one jack, one direction at a time.</li>
+  </ul>
+  <div class="warn"><b>Only 1 PPQN external clock is supported</b>: each input pulse is treated as one beat (then subdivided into four 16th steps). A standard 24 PPQN DIN source (TR-808 / 909 / TB-303) will run <b>12× fast</b> and the BPM readout will sit at the 300 limit; use a 1 PPQN source (PPQN divider 1/2/24 is planned).</div>
+
+  <h2><span class="n">9</span>Factory reset</h2>
+  <table>
+    <tr><th style="width:36mm">Engine</th><th>Gesture</th></tr>
+    <tr><td class="k">Acid / DRIFT</td><td>Hold <kbd>1</kbd>+<kbd>2</kbd> for 0.5 s</td></tr>
+    <tr><td class="k">Drums</td><td>In drum mode, hold <kbd>1</kbd>+<kbd>2</kbd> for 1 s</td></tr>
+  </table>
+
+  <h2><span class="n">10</span>Troubleshooting</h2>
+
+  <h3 style="margin-top:0.6mm">10.1 Only ACID is audible (no drums/DRIFT)</h3>
+  <p style="margin-bottom:0.6mm">Check these 4 in order:</p>
+  <ol>
+    <li><b>Are the drums running?</b> → press 9+10 for drum mode, then 1+2 to start;</li>
+    <li><b>Is DRIFT on?</b> → DRIFT is off by default; press 9+10+11 (0.5 s) to switch to it;</li>
+    <li><b>Is the physical MIX pot at the ACID end?</b> → turn it to the middle or toward DRIFT (at the ACID end drums/DRIFT are about −17 dB, quietest);</li>
+    <li><b>MIX EDIT levels</b> → hold 15+16 for MIX EDIT and turn RES and DCY up (a knob must move first).</li>
+  </ol>
+
+  <h3>10.2 No drums while syncing</h3>
+  <ul>
+    <li>Sync uses GP8 only and <b>does not mute the drums</b>; first check that drum mode is running (9+10 → 1+2);</li>
+    <li>Check the physical MIX pot at the ACID end and whether MIX EDIT's DCY has pulled the drums down;</li>
+    <li>Make sure the latest firmware is installed (section 11). (The upstream board puts the clock on GP2 and mutes the drums while syncing; the AD-5 does not.)</li>
+  </ul>
+
+  <h3>10.3 Sync does not respond</h3>
+  <ul>
+    <li>Check the boot choice: <b>pad 1 = in, pad 2 = out</b> (remembered; hold pad 14 to change);</li>
+    <li>Input: confirm Sync In is selected (<b>SYNC IN cyan</b>), and the external clock is on the selected pin's jack;</li>
+    <li>Output: confirm Sync Out is selected (<b>SYNC OUT magenta</b>), <b>at least one engine is playing</b> (Acid 1+2, DRIFT or drums), and the external device is connected to the right jack;</li>
+    <li>Check the direction switch / cable contact;</li>
+    <li><b>Is the clock source 24 PPQN?</b> The unit accepts 1 PPQN only; an 808/909/303 will run away (section 8).</li>
+  </ul>
+
+  <h3>10.4 Display wrong or inverted</h3>
+  <p>This firmware includes the display orientation fix (MADCTL <span class="hl">0x40</span>). Garbled/no display: check the TFT wiring and RST — on this board RST must go to <b>3V3</b>; a fully black screen usually means RST is open or loose. The sync option cannot blank the screen on the AD-5 (only the upstream board, where GP8 is a reset pin, can blank if sync is selected by mistake).</p>
+
+  <h2><span class="n">11</span>Firmware and flashing</h2>
+  <h3 style="margin-top:0.6mm">11.1 Factory firmware</h3>
+  <p>The unit ships with the factory firmware in <span class="muted">Firmware/</span>Acid_Drip_Drum_Acid_Drift_V5/. The workflow <span class="muted">.github/workflows/build-firmware.yml</span> <b>builds on every push to main</b> and uploads the UF2 as an artifact (name <span class="hl">acid-drip-firmware</span>). Download the official build from GitHub Releases; artifacts expire and are not a long-term link.</p>
+  <table>
+    <tr><th style="width:24mm">Firmware</th><th style="width:56mm">Build (tested version)</th><th style="width:40mm">Flash</th><th>RAM</th></tr>
+    <tr><td>Factory</td><td>Acid_Drip_V5.uf2</td><td>154340 bytes (7%)</td><td>57732 bytes (22%)</td></tr>
+  </table>
+
+  <h3>11.2 Flashing (drag the UF2)</h3>
+  <ol>
+    <li>Hold <b>BOOTSEL</b> on the Pico and connect USB;</li>
+    <li>Drag the <b>.uf2</b> file onto the <span class="hl">RPI-RP2</span> drive;</li>
+    <li>The unit reboots automatically.</li>
+  </ol>
+
+  <h3>11.3 Build environment</h3>
+  <ul>
+    <li>Board package <b>Raspberry Pi Pico / RP2040</b> (Earle Philhower core), FQBN <span class="muted">rp2040:rp2040:rpipico</span>; libraries <b>Mozzi, Adafruit GFX, Adafruit ILI9341</b>; sample rate <b>16384 Hz</b>;</li>
+    <li>The RP2040 core is not in the default Arduino index: add the extra index URL (<span class="muted">package_rp2040_index.json</span>), then <span class="muted">arduino-cli core install rp2040:rp2040</span>.</li>
+  </ul>
+
+  <h2><span class="n">12</span>Technical specs</h2>
+  <table>
+    <tr><th style="width:28mm">Item</th><th>Spec</th></tr>
+    <tr><td class="k">MCU</td><td>RP2040 dual-core (Core 0: Mozzi audio + drum mix; Core 1: display + drum sample buffer; FIFO between them)</td></tr>
+    <tr><td class="k">Audio out</td><td>Acid GP15 (Mozzi 16.384 kHz); drums + DRIFT GP2 (PWMAudio 488 kHz carrier, avoiding beat between carriers)</td></tr>
+    <tr><td class="k">Sample rate</td><td>16384 Hz</td></tr>
+    <tr><td class="k">Power</td><td>USB-C 5 V; <b>no internal battery</b>, runs only while plugged in; power supply not included</td></tr>
+    <tr><td class="k">Sync</td><td>Dedicated GP8, input/output chosen at boot; 1 PPQN, 15 ms pulse; drums/DRIFT stay audible</td></tr>
+    <tr><td class="k">Three-engine sync</td><td>Drum and DRIFT steps are driven by the acid sequencer; no drift at any tempo/length</td></tr>
+  </table>
+
+  <h3>12.1 Audio output stage (AD-5: R3 10K / R1 3.3K / C7 10nF / C6 10µF)</h3>
+  <ul style="margin-bottom:0.6mm">
+    <li><b>Acid (GP15 → R3 10K → node)</b>: the node has C7 10nF and R1 3.3K to ground. Divider 3.3/(10+3.3) ≈ <b>0.25 (−12 dB)</b>; R3∥R1 ≈ 2.5K with C7 forms a low-pass at ≈ <b>6.4 kHz</b>.</li>
+    <li><b>Drums + DRIFT (GP2 → SPDT → MIX 10K → node)</b>: the SPDT switches GP2 between “audio / sync”; the pot acts as volume (upstream leaves the other end open; the AD-5 ties it to ground through 4.7K), so the ACID end attenuates drums/DRIFT to about <b>−17 dB</b> but never fully.</li>
+    <li><b>Output (node → C6 10µF → AUDIO jack)</b>: DC-blocked into the single 3.5 mm jack; high-pass ≈1.6 Hz into a 10K line input / ≈500 Hz into 32 Ω headphones (bass gets noticeably thinner).</li>
+    <li><b>MIX EDIT (15+16)</b>: CUT/RES/DCY trim the three levels on top of the physical pot and save to EEPROM; it cannot replace the physical balance.</li>
+  </ul>
+
+  <p class="muted" style="font-size:6.3pt;margin-top:1.5mm">This manual describes firmware v1.0.0 (2026-11-26). Hardware (schematic, PCB, panel, enclosure) is an original AZSMZ design; the firmware is a modified version of <b>Acid Drip</b>, released under <b>GPL-3.0</b>; source and change list: https://github.com/cxandy/Acid_Drip. Upstream project and firmware author: Marcus (lonesoulsurfer); drum engine adapted from DrumKid (Matt Bradshaw); acid engine adapted from Badass Bass; built on the Mozzi audio library. “Acid Drip” is the upstream project name; this is an independent compatible product, not an official product.</p>
+  </div>
+
+  <div class="pageno"><span>AZSMZ AD-5 — User Manual</span><span>Page 4 / 4</span></div>
+</div>
+
+</body>
+</html>

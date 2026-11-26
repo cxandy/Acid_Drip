@@ -10,7 +10,7 @@
 > - EEPROM layout fix: the filter settings and the CUSTOM drum pattern no longer overwrite each other across a reboot
 > - `MADCTL 0x40` display-orientation fix
 > - `Firmware/Acid_Drip_V5_AcidBox/` — AcidBox 303 engine port, kept as source only (not shipped, no prebuilt download); the shipped AD-5 firmware is `Firmware/Acid_Drip_Drum_Acid_Drift_V5/` (original acid engine)
-> - A GitHub Actions workflow (`.github/workflows/build-firmware.yml`) compiles both variants on every push as a regression check; only the original-sound UF2 is published in Releases
+> - A GitHub Actions workflow (`.github/workflows/build-firmware.yml`) compiles both variants on every push as a regression check; only the factory UF2 (`Acid_Drip_V5.uf2`) is published in Releases
 >
 > See `README.md` for the full change list.
 

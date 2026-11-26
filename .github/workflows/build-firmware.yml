@@ -73,7 +73,7 @@ jobs:
       # arduino-pico  arduino-cli 
       #  --build-property 
       # <build.path>/core/core.a ld: cannot find .../core/core.a
-      - name: Compile variant A (original sound)
+      - name: Compile variant A (factory)
         run: |
           arduino-cli compile \
             --fqbn rp2040:rp2040:rpipico \
@@ -101,7 +101,7 @@ jobs:
       - name: Collect UF2 binaries
         run: |
           mkdir -p dist
-          cp build/variant_a/*.uf2 dist/Acid_Drip_V5_Original_Sound.uf2
+          cp build/variant_a/*.uf2 dist/Acid_Drip_V5.uf2
           cp build/variant_b/*.uf2 dist/Acid_Drip_V5_AcidBox_303.uf2
           ls -l dist
           sha256sum dist/*.uf2
