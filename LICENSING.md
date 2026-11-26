@@ -26,8 +26,8 @@ Fork source: https://github.com/cxandy/Acid_Drip
 
 Changes relative to upstream `f88e64d`:
 
-- Sync clock pin selected **at boot** (GPIO8 on the modified board, GPIO2 on the original PCB) instead of a compile-time choice.
-- LCD reset moved to 3V3 on the modified board, freeing GPIO8; drums and DRIFT stay audible in both sync directions.
+- Sync clock pin selected **at boot** (GPIO8 on the AZSMZ AD-5, GPIO2 on the upstream original PCB) instead of a compile-time choice.
+- LCD reset tied to 3V3 on the AZSMZ AD-5, freeing GPIO8; drums and DRIFT stay audible in both sync directions.
 - `MADCTL 0x40` display-orientation fix.
 - Acid filter switched back to the older sound profile.
 - Second sketch under `Firmware/Acid_Drip_V5_AcidBox/` with an AcidBox 303 engine port.

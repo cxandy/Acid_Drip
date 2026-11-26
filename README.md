@@ -1,13 +1,16 @@
 # Acid Drip - Bassline Synth, Drift Synth & Drum Machine
 
-> **This is a hardware-adapted fork.** Original project: [lonesoulsurfer/Acid_Drip](https://github.com/lonesoulsurfer/Acid_Drip_Bassline_and_Drum_Synth) by Marcus. Firmware is GPL-3.0; upstream hardware files are CERN-OHL-S-2.0 — see [LICENSING.md](LICENSING.md).
+> **This is a fork of Acid Drip.** Original project: [lonesoulsurfer/Acid_Drip](https://github.com/lonesoulsurfer/Acid_Drip_Bassline_and_Drum_Synth) by Marcus. Firmware is GPL-3.0; upstream hardware files are CERN-OHL-S-2.0 — see [LICENSING.md](LICENSING.md).
+>
+> **Hardware note:** the board sold as **AZSMZ AD-5** is AZSMZ's own design, drawn from scratch in JLCEDA around the same pin assignment. This repository also keeps the upstream KiCad, front-panel and Gerber files; those remain under CERN-OHL-S-2.0, but they are not the board in the product listing.
 >
 > Local changes in this build:
-> - The sync clock pin is picked **at boot** — GPIO8 on the modified board (LCD RST jumpered to 3V3 to free it) or GPIO2 on the original PCB. One firmware serves both boards; no recompile needed.
-> - On the modified board (sync on GPIO8) the drums and DRIFT stay audible in **both** sync directions, because GP2 remains drum/DRIFT audio only
+> - The sync clock pin is picked **at boot** — GPIO8 on the AZSMZ AD-5 (LCD RST tied to 3V3) or GPIO2 on the upstream original PCB. One firmware serves both boards; no recompile needed. The direction chosen on **pad 1 / pad 2** is **stored in EEPROM** and comes back on every power cycle; the top bar shows **SYNC IN** (cyan) or **SYNC OUT** (magenta) on the acid and drum screens.
+> - On the AZSMZ AD-5 (sync on GPIO8) the drums and DRIFT stay audible in **both** sync directions, because GP2 remains drum/DRIFT audio only
+> - EEPROM layout fix: the filter settings and the CUSTOM drum pattern no longer overwrite each other across a reboot
 > - `MADCTL 0x40` display-orientation fix
-> - `Firmware/Acid_Drip_V5_AcidBox/` — second firmware variant with an AcidBox 303 engine port; `Firmware/Acid_Drip_Drum_Acid_Drift_V5/` keeps the original acid engine
-> - A GitHub Actions workflow (`.github/workflows/build-firmware.yml`) compiles both variants on every push; the UF2 binaries are downloadable from the run's artifacts
+> - `Firmware/Acid_Drip_V5_AcidBox/` — AcidBox 303 engine port, kept as source only (not shipped, no prebuilt download); the shipped AD-5 firmware is `Firmware/Acid_Drip_Drum_Acid_Drift_V5/` (original acid engine)
+> - A GitHub Actions workflow (`.github/workflows/build-firmware.yml`) compiles both variants on every push as a regression check; only the original-sound UF2 is published in Releases
 >
 > See `README.md` for the full change list.
 
@@ -40,15 +43,16 @@ NOTE: V5 firmware adds a second synth voice called DRIFT, pattern chaining for t
 | Pots | 4x 10K: CUT / RES / DECAY analog (GP26 / GP28 / GP27) + MIX balance (goes straight into the audio node, not an ADC input) |
 | Audio out (acid) | GP15 -> R3 10K -> node; C7 10nF + R1 3.3K from node to GND (0.25 divider, ~6.4 kHz low-pass) -> C6 10uF (V5 original: 100uF) -> 3.5mm jack |
 | Audio out (drums) | GP2 -> SPDT (audio/sync) -> MIX balance pot (10K, wiper to the node, 4.7K from the other end to GND) -> the same node. In V5 this output also carries the DRIFT synth voice, summed with the drums |
-| Sync in/out | Chosen at boot from the SYNC SETUP menu: **GPIO8** on the modified board (the LCD RST line was moved off GP8 to 3V3 to free it) or **GPIO2** on the original PCB. The direction (in or out) is picked in the same menu, see Sync In/Out below |
+| Jacks | AUDIO 3.5 mm: **TIP = signal, RING = GND, SLEEVE = GND** (mono). Never tie TIP to RING: a TS plug grounds the ring and would short the output. SYNC 3.5 mm: **TIP = GP8, SLEEVE = GND, RING unconnected** (do not ground the ring; some TRS sync cables carry start/stop on it) |
+| Sync in/out | Chosen at boot from the SYNC SETUP menu: **GPIO8** on the AZSMZ AD-5 (LCD RST tied to 3V3) or **GPIO2** on the upstream original PCB. The direction (in or out) is picked in the same menu, see Sync In/Out below |
 
 
 ### Wiring
 
 ```
-TFT   : SCK=GP6  SDA=GP7  RST=3V3  DC=GP10  CS=GP13   (modified board; RST moved off GP8)
+TFT   : SCK=GP6  SDA=GP7  RST=3V3  DC=GP10  CS=GP13   (AZSMZ AD-5; RST tied to 3V3)
 Pots  : CUT=GP26  RES=GP28  DCY=GP27
-Sync  : IN/OUT = GP8 (modified board) or GP2 (original PCB) — picked at boot
+Sync  : IN/OUT = GP8 (AZSMZ AD-5) or GP2 (upstream original PCB) — picked at boot
 Audio : Acid=GP15   Drums/DRIFT=GP2
 
 Top row pads (steps 1-8):
@@ -388,32 +392,32 @@ Holding pads 3+4+5+6 together for 1 second while in drum mode (and not holding p
 
 ## Sync In / Sync Out / Drum Mode (GP8 or GP2)
 
-The sync clock can run on **GPIO8** or **GPIO2**. The pin is picked at boot from the SYNC SETUP menu, so one firmware covers both the modified board and the original PCB:
+The sync clock can run on **GPIO8** or **GPIO2**. The pin is picked at boot from the SYNC SETUP menu, so one firmware covers both the AZSMZ AD-5 and the upstream original PCB:
 
-- **Modified board (sync on GP8):** the LCD RST line is jumpered to 3V3, which frees GP8. GP2 stays exclusively drum/DRIFT audio.
-- **Original PCB (sync on GP2):** the LCD RST line really is GP8, and the on-board SPDT switch shares GP2 between the drum/DRIFT audio and the clock. Put the switch in the SYNC position when using sync.
+- **AZSMZ AD-5 (sync on GP8):** the LCD RST line is tied to 3V3, so GP8 is available. GP2 stays exclusively drum/DRIFT audio.
+- **Upstream original PCB (sync on GP2):** the LCD RST line really is GP8, and the on-board SPDT switch shares GP2 between the drum/DRIFT audio and the clock. Put the switch in the SYNC position when using sync.
 
 **Boot detection selects the mode, the pin, and the direction:**
 
-- **Drum mode (default):** hold nothing at power-on. GP2 is claimed by PWMAudio DMA and outputs drum and DRIFT audio.
-- **SYNC SETUP menu:** hold **pad 14** at power-on. A cyan "SYNC SETUP" screen appears with four options, then press the matching pad:
+- **Saved direction, or drum mode:** hold nothing at power-on. If a GP8 direction was saved, the unit comes up in that direction; if nothing was ever saved, GP2 is claimed by PWMAudio DMA and outputs drum and DRIFT audio (normal drum mode).
+- **SYNC SETUP menu:** hold **pad 14** at power-on. A cyan "SYNC SETUP" screen appears with four options and the currently saved direction, then press the matching pad:
 
-| Pad | Sync pin | Direction | Use on |
-|---|---|---|---|
-| Pad 1 | GP8 | Sync In | modified board |
-| Pad 2 | GP8 | Sync Out | modified board |
-| Pad 3 | GP2 | Sync In | original PCB (SPDT switch in SYNC position) |
-| Pad 4 | GP2 | Sync Out | original PCB (SPDT switch in SYNC position) |
+| Pad | Sync pin | Direction | Use on | Remembered |
+|---|---|---|---|---|
+| Pad 1 | GP8 | Sync In | AZSMZ AD-5 | yes |
+| Pad 2 | GP8 | Sync Out | AZSMZ AD-5 | yes |
+| Pad 3 | GP2 | Sync In | upstream original PCB (SPDT switch in SYNC position) | no — this boot only, clears the saved direction |
+| Pad 4 | GP2 | Sync Out | upstream original PCB (SPDT switch in SYNC position) | no — this boot only, clears the saved direction |
 
 Sync In configures that pin as a digital input and listens for an external clock pulse, driving this device's tempo from it. Sync Out makes it a clock output, generating a pulse train from this device's own tempo so it can drive other gear as the master.
 
-A "SYNC IN ACTIVE" / "SYNC OUT ACTIVE" confirmation follows briefly once chosen, and the info bar's "S" indicator (top right) is cyan for Sync In and magenta for Sync Out while playing.
+A "SYNC IN ACTIVE" / "SYNC OUT ACTIVE" confirmation follows briefly once chosen. From then on, the **top-right of the acid and drum screens** shows **SYNC IN** (cyan) or **SYNC OUT** (magenta), or nothing when sync is off.
 
-Sync Out only emits pulses while the acid transport is running (pads 1+2). It goes idle (line held low) when stopped rather than free-running through a stopped pattern. Each gate is 15ms wide regardless of tempo, and one gate is emitted per beat — the sequencer runs in 16th-note steps and the gate fires on every 4th of them.
+Sync Out emits pulses while **any engine is running**: the acid transport (pads 1+2), DRIFT, or the drums playing on their own. It goes idle (line held low) when everything is stopped rather than free-running through a stopped pattern. Each gate is 15ms wide regardless of tempo, and one gate is emitted per beat — the sequencer runs in 16th-note steps and the gate fires on every 4th of them.
 
-> **Note on the GP8 build:** GP8 was the TFT reset pin in the original design; on the modified board the LCD RST line is jumpered to 3V3 so GP8 is free for sync. Because sync lives on its own pin, drum/DRIFT audio on GP2 keeps running in **both** sync directions — syncing never silences the drums any more (unlike the original GP2-sync firmware). The same firmware still works on an unmodified PCB by picking pad 3 / pad 4, but there GP2 carries the clock, so the drums fall silent while sync is active (upstream behaviour — exactly what the hardware modification exists to avoid). Sync In and Sync Out still cannot run at the same time, since they share the one jack; the boot menu is where you pick one for that session.
+> **Note on the GP8 build:** GP8 was the TFT reset pin in the original design; on the AZSMZ AD-5 the LCD RST line is tied to 3V3, so GP8 is free for sync. Because sync lives on its own pin, drum/DRIFT audio on GP2 keeps running in **both** sync directions — syncing never silences the drums any more (unlike the original GP2-sync firmware). The same firmware still works on an unmodified upstream PCB by picking pad 3 / pad 4, but there GP2 carries the clock, so the drums fall silent while sync is active (upstream behaviour — exactly what the AZSMZ pin assignment avoids). Sync In and Sync Out still cannot run at the same time, since they share the one jack; the boot menu is where you pick one, and a pad 1/2 choice is remembered until you hold pad 14 again.
 
-> **Match the option to the board.** On an original PCB GP8 is still the LCD reset line, so picking GP8 there holds the panel in reset and the screen goes blank. On a modified board there is no sync jack wired to GP2, so picking GP2 sends the clock into the drum/DRIFT audio output instead.
+> **Match the option to the board.** On an upstream original PCB GP8 is still the LCD reset line, so picking GP8 there holds the panel in reset and the screen goes blank. On the AZSMZ AD-5 there is no sync jack wired to GP2, so picking GP2 sends the clock into the drum/DRIFT audio output instead.
 
 > **Clock rate:** both directions run at **1 pulse per beat (1 PPQN)**. A standard 24 PPQN DIN source (TR-808 / 909 / TB-303) sends 24 pulses per beat, which this build reads as 24 separate beats — the sequencer then runs 12x fast and the BPM readout sits at its 300 clamp. Wire it to a 1 PPQN source for now; a PPQN divisor (1 / 2 / 24) is planned.
 
@@ -430,7 +434,7 @@ The two cores communicate via the RP2040 inter-core FIFO. All SPI/TFT calls happ
 
 The drum clock is driven directly by the acid sequencer's `advanceStep()` call rather than an independent timer. In V5, DRIFT's own step advance is driven from the same call. This guarantees zero drift between all engines at all tempos and pattern lengths.
 
-The drum audio path on GP2 uses a separate `PWMAudio` DMA instance at 488kHz carrier (versus Mozzi's 48kHz on GP15). This prevents carrier-frequency beating between the two audio outputs that would otherwise cause the acid synth to sound quieter when drums (and, in V5, DRIFT) are playing. DRIFT is rendered digitally and summed into this same GP2 path alongside the drums, rather than having a separate output of its own.
+The drum audio path on GP2 uses a separate `PWMAudio` DMA instance at 488kHz carrier (versus Mozzi's 48kHz PWM carrier on GP15; the sample rate is 16.384 kHz). This prevents carrier-frequency beating between the two audio outputs that would otherwise cause the acid synth to sound quieter when drums (and, in V5, DRIFT) are playing. DRIFT is rendered digitally and summed into this same GP2 path alongside the drums, rather than having a separate output of its own.
 
 MIX EDIT's per-engine levels (V5) are a digital trim applied on top of this, independent of the physical mix pot, and are stored in EEPROM alongside the other saved settings.
 
@@ -442,7 +446,7 @@ MIX EDIT's per-engine levels (V5) are a digital trim applied on top of this, ind
 - Drum engine adapted from **DrumKid** by Matt Bradshaw  https://www.youtube.com/watch?v=509iZGjnVhM
 - Built with the [Mozzi](https://sensorium.github.io/Mozzi/) audio library
 - Original Acid Drip project and firmware by Marcus ([lonesoulsurfer](https://github.com/lonesoulsurfer))
-- Board, front panel and enclosure for this fork by cxandy, drawn from scratch in JLCEDA
+- Board, front panel and enclosure by AZSMZ (cxandy), drawn from scratch in JLCEDA
 
 ---
 
