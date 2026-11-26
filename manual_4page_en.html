@@ -143,7 +143,7 @@
 
   <div class="sec-a">
   <h2 style="margin-top:0"><span class="n">1</span>Introduction</h2>
-  <p><b>AZSMZ AD-5</b> is a dual-core, three-in-one instrument built on <b>RP2040 (Raspberry Pi Pico)</b> with the <b>Mozzi audio library</b>: a 16-step classic 303-style acid bass sequencer, a second independent synth voice <b>DRIFT</b> (16 engines, its own pattern), and an 8-voice drum machine with 16 preset patterns plus one user-editable pattern. <b>All three engines can play at once</b>, each with independent start/stop; the mix is set by the <b>physical MIX Balance pot</b> plus <b>MIX EDIT digital trim</b>. The hardware is an original AZSMZ design; the firmware is a GPL-3.0 modified version of Acid Drip. Power is <b>USB-C 5 V</b>; there is <b>no internal battery</b> — unplug to power off.</p>
+  <p><b>AZSMZ AD-5</b> is a dual-core, three-in-one instrument built on <b>RP2040 (Raspberry Pi Pico)</b> with the <b>Mozzi audio library</b>: a 16-step classic 303-style acid bass sequencer, a second independent synth voice <b>DRIFT</b> (16 engines, its own pattern), and an 8-voice drum machine with 16 preset patterns plus one user-editable pattern. <b>All three engines can play at once</b>, each with independent start/stop; the mix is set by the <b>physical MIX Balance pot</b> plus <b>MIX EDIT digital trim</b>. The hardware is an original AZSMZ design; the firmware is a GPL-3.0 modified version of Acid Drip. Power is <b>USB-C 5 V</b> only; there is <b>no battery holder, battery connector or charging circuit</b> — unplug to power off.</p>
   <table>
     <tr><th style="width:26mm">Part</th><th>Description</th><th style="width:22mm">Hardware</th><th style="width:56mm">Spec</th></tr>
     <tr><td>Acid bass synth</td><td>16-step acid sequencer, classic 303 style</td><td>MCU</td><td>RP2040 dual-core (Pico)</td></tr>
@@ -535,7 +535,7 @@ Pad GPIO    : top row 1-8 → GP14 GP12 GP11 GP16 GP17 GP19 GP20 GP21
     <tr><td class="k">MCU</td><td>RP2040 dual-core (Core 0: Mozzi audio + drum mix; Core 1: display + drum sample buffer; FIFO between them)</td></tr>
     <tr><td class="k">Audio out</td><td>Acid GP15 (Mozzi 16.384 kHz); drums + DRIFT GP2 (PWMAudio 488 kHz carrier, avoiding beat between carriers)</td></tr>
     <tr><td class="k">Sample rate</td><td>16384 Hz</td></tr>
-    <tr><td class="k">Power</td><td>USB-C 5 V; <b>no internal battery</b>, runs only while plugged in; power supply not included</td></tr>
+    <tr><td class="k">Power</td><td>USB-C 5 V only; <b>no battery holder, connector or charging circuit</b>; runs only while plugged in; power supply not included</td></tr>
     <tr><td class="k">Sync</td><td>Dedicated GP8, input/output chosen at boot; 1 PPQN, 15 ms pulse; drums/DRIFT stay audible</td></tr>
     <tr><td class="k">Three-engine sync</td><td>Drum and DRIFT steps are driven by the acid sequencer; no drift at any tempo/length</td></tr>
   </table>
