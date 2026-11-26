@@ -415,7 +415,7 @@ const uint8_t PAD_PINS[16] = {
 #define SW 320
 #define SH 240
 
-// The AD-5 uses an ST7789V panel (320x240), driven through the
+// The AD-5 uses a 2.4" ST7789V panel (320x240), driven through the
 // ILI9341-compatible command set. setRotation(3) writes its own MADCTL
 // value; on this panel that value does not give the correct orientation,
 // so it is overridden below with 0x40: MX only (reverse column order),

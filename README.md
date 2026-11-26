@@ -17,7 +17,7 @@
 Youtube Video (click the image) - [![Acid Drip Demo](https://img.youtube.com/vi/anotb2mvv04/maxresdefault.jpg)](https://youtu.be/anotb2mvv04) 
 
 
-An RP2040-based acid bassline synthesizer and drum machine built on the Mozzi audio library. Three instruments in one device: a 16-step acid sequencer, a second synth voice called DRIFT, and a 16-pattern drum groove box, all running simultaneously on dual cores with a 320x240 ST7789V TFT display and 16 12×12 mm tactile-switch pads.
+An RP2040-based acid bassline synthesizer and drum machine built on the Mozzi audio library. Three instruments in one device: a 16-step acid sequencer, a second synth voice called DRIFT, and a 16-pattern drum groove box, all running simultaneously on dual cores with a 2.4" 320x240 ST7789V TFT display and 16 12×12 mm tactile-switch pads.
 
 NOTE: the images of the synth are V1. V2 is what I have provided in this repo and looks a little different (extra pot for mix added).
 
@@ -38,7 +38,7 @@ NOTE: V5 firmware adds a second synth voice called DRIFT, pattern chaining for t
 | Component | Detail |
 |-----------|--------|
 | MCU | RP2040 (Raspberry Pi Pico or equivalent) |
-| Display | ST7789V 320x240 TFT |
+| Display | 2.4" ST7789V 320x240 TFT |
 | Pads | 16x 12×12 mm tactile switches (2 rows of 8) |
 | Pots | 4x 10K: CUT / RES / DECAY analog (GP26 / GP28 / GP27) + MIX balance (goes straight into the audio node, not an ADC input) |
 | Audio out (acid) | GP15 -> R3 10K -> node; C7 10nF + R1 3.3K from node to GND (0.25 divider, ~6.4 kHz low-pass) -> C6 10uF (V5 original: 100uF) -> 3.5mm jack |
