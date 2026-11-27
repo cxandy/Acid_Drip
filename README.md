@@ -11,8 +11,6 @@
 > - `MADCTL 0x40` display-orientation fix
 > - `Firmware/Acid_Drip_V5_AcidBox/` — AcidBox 303 engine port, kept as source only (not shipped, no prebuilt download); the shipped AD-5 firmware is `Firmware/Acid_Drip_Drum_Acid_Drift_V5/` (original acid engine)
 > - A GitHub Actions workflow (`.github/workflows/build-firmware.yml`) compiles both variants on every push as a regression check; only the factory UF2 (`Acid_Drip_V5.uf2`) is published in Releases
->
-> See `README.md` for the full change list.
 
 Youtube Video (click the image) - [![Acid Drip Demo](https://img.youtube.com/vi/anotb2mvv04/maxresdefault.jpg)](https://youtu.be/anotb2mvv04) 
 
@@ -457,4 +455,4 @@ MIX EDIT's per-engine levels (V5) are a digital trim applied on top of this, ind
 - This fork's own board, PCB front panel and base plate design is not derived from the upstream files and is not covered by CERN-OHL-S-2.0.
 - "Acid Drip" is the original project's name; the licences do not grant trademark rights.
 
-Details and the modification list: [LICENSING.md](LICENSING.md) and [README.md](README.md).
+Details: [LICENSING.md](LICENSING.md).

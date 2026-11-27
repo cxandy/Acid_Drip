@@ -1,7 +1,7 @@
 name: Build firmware
 
-#  UF2  artifact 
-#  main /  PR / 
+# Build both firmware variants and upload the UF2 files as artifacts.
+# Triggers: push to main, any pull request, or manual dispatch.
 on:
   push:
     branches: [main]
@@ -29,9 +29,9 @@ jobs:
         with:
           version: 1.1.1
 
-      # RP2040  Arduino  Philhower  URL
-      #  rp2040 id  rp2040:rp2040
-      # FQBN  rp2040:rp2040:rpipico arduino:rp2040
+      # The RP2040 core is not in the default Arduino index, so add Philhower's extra index URL.
+      # The package name in that index is rp2040, so the core id is rp2040:rp2040,
+      # and the FQBN is rp2040:rp2040:rpipico (not arduino:rp2040).
       - name: Install RP2040 core
         run: |
           arduino-cli version
@@ -48,8 +48,8 @@ jobs:
           arduino-cli lib install "Adafruit GFX Library" "Adafruit ILI9341"
           arduino-cli lib list
 
-      # Mozzi  Library Manager
-      # sensorium/Mozzi  v2.0.4  library.properties
+      # Mozzi is available from Library Manager; if that entry cannot be fetched,
+      # install from the sensorium/Mozzi v2.0.4 source tree (the repo root is library.properties).
       - name: Install Mozzi
         run: |
           if arduino-cli lib install "Mozzi@2.0.4"; then
@@ -66,13 +66,13 @@ jobs:
           fi
           arduino-cli lib list
 
-      # ──  A ──────────────────────────────────────────────
-      # Sketch  .ino 
+      # -- Variant A: factory firmware ------------------------------------------
+      # The sketch folder has the same name as the main .ino, so it compiles directly.
       #
-      #  --build-path --build-property build.path=...
-      # arduino-pico  arduino-cli 
-      #  --build-property 
-      # <build.path>/core/core.a ld: cannot find .../core/core.a
+      # --build-path is required; do not use --build-property build.path=...
+      # arduino-pico's core archive is written by arduino-cli into its own internal build directory,
+      # so --build-property only changes the path seen by the link step; the linker then looks for
+      # <build.path>/core/core.a and cannot find it (ld: cannot find .../core/core.a).
       - name: Compile variant A (factory)
         run: |
           arduino-cli compile \
@@ -81,9 +81,10 @@ jobs:
             --build-path "${{ github.workspace }}/build/variant_a" \
             Firmware/Acid_Drip_Drum_Acid_Drift_V5
 
-      # ──  BAcidBox 303 ───────────────────────────────────────────
-      #  (Acid_Drip_V5_AcidBox)  .ino  (Acid_Drip_V5_Drum_Acid_Drift)
-      #  arduino-cli 
+      # -- Variant B: AcidBox 303 -----------------------------------------------
+      # The sketch folder (Acid_Drip_V5_AcidBox) and the main .ino
+      # (Acid_Drip_V5_Drum_Acid_Drift) have different names, so stage it under
+      # a matching folder name before compiling with arduino-cli.
       - name: Stage variant B sketch
         run: |
           mkdir -p build/sketches

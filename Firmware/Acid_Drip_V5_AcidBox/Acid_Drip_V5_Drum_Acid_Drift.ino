@@ -1320,8 +1320,7 @@ bool     syncOk=false;
 // gSyncPin == SYNC_PIN_GP2 also means the drum/DRIFT audio on GP2 is
 // switched off for the whole session while sync is active — the clock and
 // the drum audio genuinely cannot share one GPIO. (This variant does NOT
-// fold the drums onto GP15 the way the original-sound sketch does; see
-// README.md §5.2.)
+// fold the drums onto GP15 the way the original-sound sketch does.)
 uint8_t  gSyncPin = SYNC_PIN_GP8;
 bool     syncMode=false;     // true = sync active this boot (either direction) —
                               // pad 14 held at power-on, then a SYNC SETUP

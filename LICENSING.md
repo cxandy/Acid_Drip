@@ -32,7 +32,7 @@ Changes relative to upstream `f88e64d`:
 - Acid filter switched back to the older sound profile.
 - Second sketch under `Firmware/Acid_Drip_V5_AcidBox/` with an AcidBox 303 engine port.
 
-The full list, including the reasoning and the known issues, is in [README.md](README.md). Each modified source file carries a short modification notice at the top.
+Each modified source file carries a short modification notice at the top.
 
 GPL-3.0 compliance for the assembled units:
 
