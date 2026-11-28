@@ -17,16 +17,16 @@ Youtube Video (click the image) - [![Acid Drip Demo](https://img.youtube.com/vi/
 
 An RP2040-based acid bassline synthesizer and drum machine built on the Mozzi audio library. Three instruments in one device: a 16-step acid sequencer, a second synth voice called DRIFT, and a 16-pattern drum groove box, all running simultaneously on dual cores with a 2.4" 320x240 ST7789V TFT display and 16 12×12 mm tactile-switch pads.
 
-NOTE: the images of the synth are V1. V2 is what I have provided in this repo and looks a little different (extra pot for mix added).
+Top photos: the current AZSMZ AD-5. Upstream V1 photos are kept in the repository for reference.
 
 NOTE: V5 firmware adds a second synth voice called DRIFT, pattern chaining for the acid save slots, a MIX EDIT mode for balancing all three engines against each other, and a user editable custom drum pattern, on top of everything V4 had. See DRIFT Synth, Pattern Chaining, MIX EDIT and Custom Pattern below for each.
 
 <p align="center">
-  <img src="DVJM1456.JPG" width="32%" alt="Acid Drip - angle view on cyan" />
+  <img src="photos/product_2.jpg" width="32%" alt="AZSMZ AD-5 front view" />
   &nbsp;
-  <img src="KKUL8226.JPG" width="32%" alt="Acid Drip - front view on orange" />
+  <img src="photos/product_3.jpg" width="32%" alt="AZSMZ AD-5 angle view" />
   &nbsp;
-  <img src="CHRJ9214.JPG" width="32%" alt="Acid Drip - perspective view on green" />
+  <img src="photos/product_1.jpg" width="32%" alt="AZSMZ AD-5 detail view" />
 </p>
 
 ---
