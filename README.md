@@ -12,14 +12,7 @@
 > - `Firmware/Acid_Drip_V5_AcidBox/` — AcidBox 303 engine port, kept as source only (not shipped, no prebuilt download); the shipped AD-5 firmware is `Firmware/Acid_Drip_Drum_Acid_Drift_V5/` (original acid engine)
 > - A GitHub Actions workflow (`.github/workflows/build-firmware.yml`) compiles both variants on every push as a regression check; only the factory UF2 (`Acid_Drip_V5.uf2`) is published in Releases
 
-Youtube Video (click the image) - [![Acid Drip Demo](https://img.youtube.com/vi/anotb2mvv04/maxresdefault.jpg)](https://youtu.be/anotb2mvv04) 
-
-
-An RP2040-based acid bassline synthesizer and drum machine built on the Mozzi audio library. Three instruments in one device: a 16-step acid sequencer, a second synth voice called DRIFT, and a 16-pattern drum groove box, all running simultaneously on dual cores with a 2.4" 320x240 ST7789V TFT display and 16 12×12 mm tactile-switch pads.
-
-Top photos: the current AZSMZ AD-5. Upstream V1 photos are kept in the repository for reference.
-
-NOTE: V5 firmware adds a second synth voice called DRIFT, pattern chaining for the acid save slots, a MIX EDIT mode for balancing all three engines against each other, and a user editable custom drum pattern, on top of everything V4 had. See DRIFT Synth, Pattern Chaining, MIX EDIT and Custom Pattern below for each.
+**AZSMZ AD-5 (current build)** — upstream V1 photos are kept in the repository for reference.
 
 <p align="center">
   <img src="photos/product_2.jpg" width="32%" alt="AZSMZ AD-5 front view" />
@@ -28,6 +21,13 @@ NOTE: V5 firmware adds a second synth voice called DRIFT, pattern chaining for t
   &nbsp;
   <img src="photos/product_1.jpg" width="32%" alt="AZSMZ AD-5 detail view" />
 </p>
+
+Youtube Video (click the image) - [![Acid Drip Demo](https://img.youtube.com/vi/anotb2mvv04/maxresdefault.jpg)](https://youtu.be/anotb2mvv04) 
+
+
+An RP2040-based acid bassline synthesizer and drum machine built on the Mozzi audio library. Three instruments in one device: a 16-step acid sequencer, a second synth voice called DRIFT, and a 16-pattern drum groove box, all running simultaneously on dual cores with a 2.4" 320x240 ST7789V TFT display and 16 12×12 mm tactile-switch pads.
+
+NOTE: V5 firmware adds a second synth voice called DRIFT, pattern chaining for the acid save slots, a MIX EDIT mode for balancing all three engines against each other, and a user editable custom drum pattern, on top of everything V4 had. See DRIFT Synth, Pattern Chaining, MIX EDIT and Custom Pattern below for each.
 
 ---
 
